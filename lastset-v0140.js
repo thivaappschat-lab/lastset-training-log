@@ -377,126 +377,173 @@ function useLastSets(id){
 function startVoice(){
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!Recognition){showToast('Voice input is not supported in this browser');return;}
-
   if(voiceSession){
     try{voiceSession.abort();}catch(_){}
     voiceSession=null;
   }
 
-  const MAX_LISTEN_MS=15000;
-  const r=new Recognition();
-  voiceSession=r;
-  r.lang=navigator.language||'en-US';
-  r.interimResults=true;
-  r.continuous=false;
-  r.maxAlternatives=1;
-
+  // Each take has a 60 second safety ceiling. Early browser stops are NOT
+  // permission to submit an incomplete workout. Users choose Done or Continue.
+  const MAX_LISTEN_MS=60000;
+  const originalDraft=String(state.aiDraft||'');
   const overlay=document.createElement('div');
   overlay.className='ls-v14-voice';
-  overlay.innerHTML='<div class="ls-v14-voice-card"><div class="ls-v14-mic">●</div><div class="ls-i-kicker">Voice Smart Log</div><h3 data-voice-heading>Listening…</h3><p data-voice-text>Say the exercise, weight, reps and number of sets naturally.</p><div class="ls-v14-voice-actions"><button class="primary" data-voice-done>Done</button><button class="secondary" data-voice-cancel>Cancel</button></div></div>';
+  overlay.innerHTML='<div class="ls-v14-voice-card"><div class="ls-v14-mic">●</div><div class="ls-i-kicker">Voice Smart Log</div><h3 data-voice-heading>Listening…</h3><p data-voice-text aria-live="polite">Say your exercises, weights and reps naturally.</p><p class="ls-v14-voice-hint" data-voice-hint>Speak at your normal pace. Tap Done when finished. A recording can last up to 60 seconds.</p><div class="ls-v14-voice-actions"><button class="primary" data-voice-done type="button">Done</button><button class="secondary" data-voice-continue type="button" hidden>Continue speaking</button><button class="secondary" data-voice-cancel type="button">Cancel</button></div></div>';
   document.body.appendChild(overlay);
-
-  let finalText='';
-  let liveText='';
-  let cancelled=false;
-  let settled=false;
-  let watchdog=null;
-  let stopFallback=null;
-
+  const heading=overlay.querySelector('[data-voice-heading]');
+  const hint=overlay.querySelector('[data-voice-hint]');
+  const transcriptNode=overlay.querySelector('[data-voice-text]');
+  const continueButton=overlay.querySelector('[data-voice-continue]');
+  const doneButton=overlay.querySelector('[data-voice-done]');
+  let recognition=null,finalText='',liveText='',pieces=[];
+  let settled=false,cancelled=false,paused=false,finishing=false;
+  let watchdog=null,stopFallback=null;
+  const clearTimers=()=>{
+    if(watchdog!==null){clearTimeout(watchdog);watchdog=null;}
+    if(stopFallback!==null){clearTimeout(stopFallback);stopFallback=null;}
+  };
+  const takeText=()=>resolveVoiceTranscript(finalText,liveText);
+  const capturedText=()=>[...pieces,takeText()].map(s=>String(s||'').trim()).filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+  const combinedText=()=>{
+    const spoken=capturedText();
+    return [originalDraft.trim(),spoken].filter(Boolean).join(originalDraft.trim()&&spoken?'. ':'').trim();
+  };
+  const refreshTranscript=()=>{
+    const spoken=capturedText();
+    transcriptNode.textContent=spoken||'Listening…';
+    // Keep partial input recoverable if Safari suspends or reloads the page.
+    if(spoken)state.aiDraft=combinedText();
+  };
   const cleanup=()=>{
-    if(watchdog)clearTimeout(watchdog);
-    if(stopFallback)clearTimeout(stopFallback);
-    if(voiceSession===r)voiceSession=null;
+    clearTimers();
+    if(voiceSession===recognition)voiceSession=null;
     overlay.remove();
   };
-
   const commitVoice=()=>{
     if(settled||cancelled)return;
     settled=true;
-    const text=resolveVoiceTranscript(finalText,liveText);
+    const text=combinedText();
     cleanup();
-
-    if(!text){
-      showToast('I did not catch anything. Tap Speak workout and try again.');
+    if(!capturedText()){
+      state.aiDraft=originalDraft;
+      showToast('No voice was captured. Your previous text is still here.');
       return;
     }
-
     state.aiDraft=text;
     state.aiError='';
     state.aiLoading=false;
-    const parserText=normalizeVoiceTranscript(text);
     try{
-      state.aiParsed=parseSmartWorkout(parserText);
+      state.aiParsed=parseSmartWorkout(normalizeVoiceTranscript(text));
       state.aiSource='voice';
     }catch(err){
+      console.warn('Voice Smart Log parsing failed safely',err);
       state.aiParsed=null;
-      state.aiError='I captured the voice, but could not understand the workout yet.';
+      state.aiError='The words were captured. Please review or edit the description and try again.';
     }
     render();
   };
-
-  const stopListening=()=>{
-    if(settled||cancelled)return;
-    const heading=overlay.querySelector('[data-voice-heading]');
-    if(heading)heading.textContent='Finishing…';
-    try{r.stop();}catch(_){commitVoice();return;}
-    stopFallback=setTimeout(commitVoice,900);
+  const showPaused=(reason)=>{
+    if(cancelled||settled||finishing)return;
+    clearTimers();
+    paused=true;
+    if(voiceSession===recognition)voiceSession=null;
+    heading.textContent='Listening paused';
+    hint.textContent=reason||'Your browser paused the microphone. Tap Continue speaking or Done to review your words.';
+    continueButton.hidden=false;
+    doneButton.disabled=false;
+    refreshTranscript();
   };
-
-  overlay.querySelector('[data-voice-done]').onclick=stopListening;
+  const beginTake=()=>{
+    clearTimers();
+    paused=false;
+    finishing=false;
+    finalText='';
+    liveText='';
+    continueButton.hidden=true;
+    heading.textContent='Listening…';
+    hint.textContent='Speak naturally. Tap Done to finish, or continue if your browser pauses.';
+    const r=new Recognition();
+    recognition=r;
+    voiceSession=r;
+    r.lang=navigator.language||'en-US';
+    r.interimResults=true;
+    r.continuous=true;
+    r.maxAlternatives=1;
+    r.onresult=e=>{
+      if(settled||cancelled||recognition!==r)return;
+      const all=[],finalParts=[];
+      for(let i=0;i<e.results.length;i++){
+        const transcript=String(e.results[i]?.[0]?.transcript||'').trim();
+        if(!transcript)continue;
+        all.push(transcript);
+        if(e.results[i].isFinal)finalParts.push(transcript);
+      }
+      if(all.length)liveText=all.join(' ').replace(/\s+/g,' ').trim();
+      if(finalParts.length)finalText=finalParts.join(' ').replace(/\s+/g,' ').trim();
+      refreshTranscript();
+    };
+    r.onerror=e=>{
+      if(settled||cancelled||recognition!==r)return;
+      const error=String(e?.error||'');
+      if(finishing){commitVoice();return;}
+      if(error==='not-allowed'||error==='service-not-allowed'){
+        if(!capturedText()){
+          settled=true;state.aiDraft=originalDraft;cleanup();
+          showToast('Microphone permission is blocked for LastSet.');
+          return;
+        }
+        showPaused('Microphone access stopped. Your words are preserved. Tap Done to review.');
+        continueButton.hidden=true;
+      }else if(error==='audio-capture'){
+        showPaused('The microphone became unavailable. Your captured words are preserved.');
+      }else{
+        showPaused('Speech recognition paused. Continue speaking or tap Done to review.');
+      }
+    };
+    r.onend=()=>{
+      if(settled||cancelled||recognition!==r)return;
+      if(finishing){commitVoice();return;}
+      showPaused('Your browser stopped listening. No words were submitted. Continue speaking or tap Done.');
+    };
+    try{
+      r.start();
+      watchdog=setTimeout(()=>{
+        if(settled||cancelled||recognition!==r||paused||finishing)return;
+        heading.textContent='60 second take complete';
+        try{r.stop();}catch(_){}
+        // WebKit can occasionally omit onend, so never leave the UI trapped.
+        stopFallback=setTimeout(()=>showPaused('60 seconds reached. Tap Continue for another take or Done to review.'),1200);
+      },MAX_LISTEN_MS);
+    }catch(err){
+      console.warn('Voice recording could not restart',err);
+      showPaused('Microphone could not start. Your existing words remain available.');
+    }
+  };
+  doneButton.onclick=()=>{
+    if(settled||cancelled||finishing)return;
+    if(paused){commitVoice();return;}
+    finishing=true;
+    doneButton.disabled=true;
+    heading.textContent='Finishing…';
+    clearTimers();
+    try{recognition?.stop();}catch(_){commitVoice();return;}
+    stopFallback=setTimeout(commitVoice,1200);
+  };
+  continueButton.onclick=()=>{
+    if(settled||cancelled||!paused)return;
+    const previous=takeText();
+    if(previous)pieces.push(previous);
+    beginTake();
+  };
   overlay.querySelector('[data-voice-cancel]').onclick=()=>{
     if(settled)return;
-    cancelled=true;
-    settled=true;
+    cancelled=true;settled=true;
+    state.aiDraft=originalDraft;
+    try{recognition?.abort();}catch(_){}
     cleanup();
-    try{r.abort();}catch(_){}
   };
-
-  r.onresult=e=>{
-    const all=[],finalParts=[];
-    for(let i=0;i<e.results.length;i++){
-      const transcript=String(e.results[i]?.[0]?.transcript||'').trim();
-      if(!transcript)continue;
-      all.push(transcript);
-      if(e.results[i].isFinal)finalParts.push(transcript);
-    }
-    if(all.length)liveText=all.join(' ').replace(/\s+/g,' ').trim();
-    if(finalParts.length)finalText=finalParts.join(' ').replace(/\s+/g,' ').trim();
-
-    const shown=resolveVoiceTranscript(finalText,liveText)||'Listening…';
-    const node=overlay.querySelector('[data-voice-text]');
-    if(node)node.textContent=shown;
-  };
-
-  r.onerror=e=>{
-    if(cancelled||settled)return;
-    const error=String(e?.error||'');
-    const captured=resolveVoiceTranscript(finalText,liveText);
-    if(captured){commitVoice();return;}
-
-    settled=true;
-    cleanup();
-    if(error==='not-allowed'||error==='service-not-allowed')showToast('Microphone permission is blocked for LastSet.');
-    else if(error==='audio-capture')showToast('LastSet could not access the microphone.');
-    else if(error==='no-speech')showToast('I did not hear anything. Tap Speak workout and try again.');
-    else if(error!=='aborted')showToast('Voice recognition stopped. Tap Speak workout to try again.');
-  };
-
-  r.onend=()=>{
-    if(cancelled||settled)return;
-    commitVoice();
-  };
-
-  try{
-    r.start();
-    watchdog=setTimeout(stopListening,MAX_LISTEN_MS);
-  }catch(_){
-    settled=true;
-    cleanup();
-    showToast('Could not start voice input. Try again in a moment.');
-  }
+  beginTake();
 }
-
 if(typeof progressScreen==='function')progressScreen=progressOverview;
 if(typeof exerciseLogScreen==='function'){
   const baseExerciseLog=exerciseLogScreen;
