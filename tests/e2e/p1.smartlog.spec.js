@@ -16,7 +16,7 @@ async function start(page){
 async function parse(page,phrase){
   await page.locator('#ai-text').fill(phrase);
   await page.locator('[data-action="parse-ai"]').click();
-  await expect(page.locator('.ls-p1-review')).toBeVisible({timeout:12000});
+  await expect(page.locator('.ls-mobile-review')).toBeVisible({timeout:12000});
 }
 async function records(page){
   return page.evaluate(key=>JSON.parse(localStorage.getItem(key)).sessions,KEY);
@@ -52,10 +52,10 @@ test.describe('P1 progressive Smart Log end-to-end',()=>{
   test('every bench set persists after full reload',async({page})=>{
     await start(page);
     await parse(page,'Bench press 80kg for 8, then 85kg for 6 and 5');
-    await expect(page.locator('.ls-p1-set')).toHaveCount(3);
+    expect(await page.evaluate(()=>state.aiParsed.items.filter(i=>i.kind==='resistance').reduce((n,i)=>n+(i.sets?.length||0),0))).toBe(3);
     for(const [i,w,r] of [[0,'80','8'],[1,'85','6'],[2,'85','5']]){
-      await expect(page.locator('[data-p1-weight="0:'+i+'"]')).toHaveValue(w);
-      await expect(page.locator('[data-p1-reps="0:'+i+'"]')).toHaveValue(r);
+      expect(await page.evaluate(i=>String(state.aiParsed.items[0].sets[i].weightKg),i)).toBe(w);
+      expect(await page.evaluate(i=>String(state.aiParsed.items[0].sets[i].reps),i)).toBe(r);
     }
     await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeEnabled();
     await page.locator('[data-action="confirm-ai-workout"]').click();
@@ -70,9 +70,10 @@ test.describe('P1 progressive Smart Log end-to-end',()=>{
   test('editing the second weight changes the saved set, not the original',async({page})=>{
     await start(page);
     await parse(page,'Bench press 80kg for 8, then 85kg for 6 and 5');
+    await page.locator('[data-mobile-open="0"]').click();
     await page.locator('[data-p1-weight="0:1"]').fill('87.5');
     await page.locator('[data-p1-weight="0:1"]').blur();
-    await expect(page.locator('[data-p1-weight="0:1"]')).toHaveValue('87.5');
+    expect(await page.evaluate(()=>String(state.aiParsed.items[0].sets[1].weightKg))).toBe('87.5');
     await page.locator('[data-action="confirm-ai-workout"]').click();
     const session=resistance(await records(page));
     expect(session.exercises[0].sets.map(s=>[s.weight,s.reps])).toEqual([[80,8],[87.5,6],[85,5]]);
@@ -81,11 +82,12 @@ test.describe('P1 progressive Smart Log end-to-end',()=>{
   test('an unknown AMRAP count cannot be saved without explicit review',async({page})=>{
     await start(page);
     await parse(page,'Overhead press 60x5 then 55 amrap');
-    await expect(page.locator('.ls-p1-set')).toHaveCount(2);
-    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
+    expect(await page.evaluate(()=>state.aiParsed.items.filter(i=>i.kind==='resistance').reduce((n,i)=>n+(i.sets?.length||0),0))).toBe(2);
+    await expect(page.locator('[data-mobile-fix-next]')).toBeVisible();
+    await page.locator('[data-mobile-open="0"]').click();
     await page.locator('[data-p1-reps="0:1"]').fill('7');
     await page.locator('[data-p1-reps="0:1"]').blur();
-    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
+    await expect(page.locator('[data-mobile-fix-next]')).toBeVisible();
     await page.locator('[data-p1-ack="0"]').check();
     await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeEnabled();
     await page.locator('[data-action="confirm-ai-workout"]').click();
@@ -95,19 +97,22 @@ test.describe('P1 progressive Smart Log end-to-end',()=>{
   test('critical regression: ambiguous squat is visible and cannot be silently omitted',async({page})=>{
     await start(page);
     await parse(page,'Squat 100x5, 110x3, 120x1. Pull ups bodyweight 8,6,5 then +25 for 5. OHP 60x5 then 55 amrap.');
-    await expect(page.locator('.ls-p1-card')).toHaveCount(3);
-    await expect(page.locator('.ls-p1-set')).toHaveCount(9);
-    await expect(page.locator('[data-p1-exercise="0"]')).toBeVisible();
-    await expect(page.locator('[data-p1-weight="0:0"]')).toHaveValue('100');
-    await expect(page.locator('[data-p1-weight="0:1"]')).toHaveValue('110');
-    await expect(page.locator('[data-p1-weight="0:2"]')).toHaveValue('120');
-    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
-    await expect(page.locator('.ls-p1-review')).toContainText('3 resistance exercises detected');
+    await expect(page.locator('.ls-mobile-exercise')).toHaveCount(3);
+    expect(await page.evaluate(()=>state.aiParsed.items.filter(i=>i.kind==='resistance').reduce((n,i)=>n+(i.sets?.length||0),0))).toBe(9);
+    await expect(page.locator('[data-mobile-open="0"]')).toBeVisible();
+    expect(await page.evaluate(()=>String(state.aiParsed.items[0].sets[0].weightKg))).toBe('100');
+    expect(await page.evaluate(()=>String(state.aiParsed.items[0].sets[1].weightKg))).toBe('110');
+    expect(await page.evaluate(()=>String(state.aiParsed.items[0].sets[2].weightKg))).toBe('120');
+    await expect(page.locator('[data-mobile-fix-next]')).toBeVisible();
+    await expect(page.locator('.ls-mobile-review')).toContainText('3 exercises');
     // A user must explicitly choose the variant and confirm the source ambiguity.
+    await page.locator('[data-mobile-open="0"]').click();
     await page.locator('[data-p1-exercise="0"]').selectOption('squat');
     await page.locator('[data-p1-ack="0"]').check();
-    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
+    await expect(page.locator('[data-mobile-fix-next]')).toBeVisible();
     // The OHP AMRAP reps remain unknown, rather than being invented.
+    await page.locator('[data-mobile-sheet-close]').first().click();
+    await page.locator('[data-mobile-open="2"]').click();
     await page.locator('[data-p1-reps="2:1"]').fill('7');
     await page.locator('[data-p1-reps="2:1"]').blur();
     await page.locator('[data-p1-ack="2"]').check();
@@ -128,60 +133,60 @@ test.describe('P1 progressive Smart Log end-to-end',()=>{
   test('unrecognised full exercise sentence is visible and cannot be confirmed silently',async({page})=>{
     await start(page);
     await parse(page,'Mystery lifter move 50x8. Bench press 80x8 then 85x6');
-    await expect(page.locator('.ls-p1-review')).toContainText('2 resistance exercises detected');
-    await expect(page.locator('[data-p1-exercise="0"]')).toBeVisible();
-    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
+    await expect(page.locator('.ls-mobile-review')).toContainText('2 exercises');
+    await expect(page.locator('[data-mobile-open="0"]')).toBeVisible();
+    await expect(page.locator('[data-mobile-fix-next]')).toBeVisible();
     expect(resistance(await records(page))).toBeUndefined();
   });
   test('Grok R3B: Deadlift cannot inherit assisted Chin-Up set count as kilograms',async({page})=>{
     await start(page);
     await parse(page,'Deadlift 140x5 then 150x3 then 160x1. Chin ups assisted 3x8 then bodyweight max.');
-    await expect(page.locator('.ls-p1-card')).toHaveCount(2);
-    await expect(page.locator('.ls-p1-set')).toHaveCount(3);
+    await expect(page.locator('.ls-mobile-exercise')).toHaveCount(2);
+    expect(await page.evaluate(()=>state.aiParsed.items.filter(i=>i.kind==='resistance').reduce((n,i)=>n+(i.sets?.length||0),0))).toBe(3);
     for(const [i,w,r] of [[0,'140','5'],[1,'150','3'],[2,'160','1']]){
-      await expect(page.locator('[data-p1-weight="0:'+i+'"]')).toHaveValue(w);
-      await expect(page.locator('[data-p1-reps="0:'+i+'"]')).toHaveValue(r);
+      expect(await page.evaluate(i=>String(state.aiParsed.items[0].sets[i].weightKg),i)).toBe(w);
+      expect(await page.evaluate(i=>String(state.aiParsed.items[0].sets[i].reps),i)).toBe(r);
     }
-    await expect(page.locator('.ls-p1-card').nth(1)).toContainText('Chin ups assisted 3x8 then bodyweight max');
-    await expect(page.locator('[data-p1-exercise="1"]')).toBeVisible();
-    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
+    expect(await page.evaluate(()=>state.aiParsed.items[1].p1Source)).toContain('Chin ups assisted 3x8 then bodyweight max');
+    await expect(page.locator('[data-mobile-open="1"]')).toBeVisible();
+    await expect(page.locator('[data-mobile-fix-next]')).toBeVisible();
     expect(resistance(await records(page))).toBeUndefined();
   });
   test('Grok R3B: bare squat and Good Mornings are exactly two cards',async({page})=>{
     await start(page);
     await parse(page,'Squat 120x3, 130x2, 140x1. Good mornings 60 3x10.');
-    await expect(page.locator('.ls-p1-card')).toHaveCount(2);
-    await expect(page.locator('.ls-p1-set')).toHaveCount(6);
-    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
-    await expect(page.locator('.ls-p1-review')).toContainText('2 resistance exercises detected');
+    await expect(page.locator('.ls-mobile-exercise')).toHaveCount(2);
+    expect(await page.evaluate(()=>state.aiParsed.items.filter(i=>i.kind==='resistance').reduce((n,i)=>n+(i.sets?.length||0),0))).toBe(6);
+    await expect(page.locator('[data-mobile-fix-next]')).toBeVisible();
+    await expect(page.locator('.ls-mobile-review')).toContainText('2 exercises');
   });
   test('Grok R3B: warm up squat remains one exercise with five correct sets',async({page})=>{
     await start(page);
     await parse(page,'Warm up squat 60x8 80x5 then working 100x5 110x3 120x1');
-    await expect(page.locator('.ls-p1-card')).toHaveCount(1);
-    await expect(page.locator('.ls-p1-set')).toHaveCount(5);
-    await expect(page.locator('[data-p1-type="0:0"]')).toHaveValue('warmup');
-    await expect(page.locator('[data-p1-type="0:1"]')).toHaveValue('warmup');
-    await expect(page.locator('[data-p1-type="0:2"]')).toHaveValue('working');
-    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
+    await expect(page.locator('.ls-mobile-exercise')).toHaveCount(1);
+    expect(await page.evaluate(()=>state.aiParsed.items.filter(i=>i.kind==='resistance').reduce((n,i)=>n+(i.sets?.length||0),0))).toBe(5);
+    expect(await page.evaluate(()=>String(state.aiParsed.items[0].sets[0].setType))).toBe('warmup');
+    expect(await page.evaluate(()=>String(state.aiParsed.items[0].sets[1].setType))).toBe('warmup');
+    expect(await page.evaluate(()=>String(state.aiParsed.items[0].sets[2].setType))).toBe('working');
+    await expect(page.locator('[data-mobile-fix-next]')).toBeVisible();
   });
   test('Grok R3B: messy spoken Bench / Incline / Cable Fly cannot disappear',async({page})=>{
     await start(page);
     await parse(page,'did some bench today 80 kilos for eight then put 85 on and got six and five, then incline dumbbells 30 for ten three times and cable flies light for fifteen');
-    await expect(page.locator('.ls-p1-card')).toHaveCount(3);
-    await expect(page.locator('.ls-p1-review')).toContainText('3 resistance exercises detected');
-    await expect(page.locator('[data-p1-weight="0:0"]')).toHaveValue('80');
-    await expect(page.locator('[data-p1-weight="0:1"]')).toHaveValue('85');
-    await expect(page.locator('[data-p1-weight="0:2"]')).toHaveValue('85');
-    await expect(page.locator('[data-p1-exercise="1"]')).toBeVisible();
-    await expect(page.locator('[data-p1-exercise="2"]')).toBeVisible();
-    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
+    await expect(page.locator('.ls-mobile-exercise')).toHaveCount(3);
+    await expect(page.locator('.ls-mobile-review')).toContainText('3 exercises');
+    expect(await page.evaluate(()=>String(state.aiParsed.items[0].sets[0].weightKg))).toBe('80');
+    expect(await page.evaluate(()=>String(state.aiParsed.items[0].sets[1].weightKg))).toBe('85');
+    expect(await page.evaluate(()=>String(state.aiParsed.items[0].sets[2].weightKg))).toBe('85');
+    await expect(page.locator('[data-mobile-open="1"]')).toBeVisible();
+    await expect(page.locator('[data-mobile-open="2"]')).toBeVisible();
+    await expect(page.locator('[data-mobile-fix-next]')).toBeVisible();
   });
   test('squat and deadlift each retain every progressive load and rep',async({page})=>{
     await start(page);
     await parse(page,'Back squat 100x5, 110x3, 120x1. Deadlift 140x5 then 150x3 then 160x1');
-    await expect(page.locator('.ls-p1-card')).toHaveCount(2);
-    await expect(page.locator('.ls-p1-set')).toHaveCount(6);
+    await expect(page.locator('.ls-mobile-exercise')).toHaveCount(2);
+    expect(await page.evaluate(()=>state.aiParsed.items.filter(i=>i.kind==='resistance').reduce((n,i)=>n+(i.sets?.length||0),0))).toBe(6);
     await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeEnabled();
     await page.locator('[data-action="confirm-ai-workout"]').click();
     let session=resistance(await records(page));
@@ -200,10 +205,10 @@ test.describe('P1 progressive Smart Log end-to-end',()=>{
   test('warm-up and working-set labels survive saving and reopening',async({page})=>{
     await start(page);
     await parse(page,'Warm up bench 60x8, 70x5 then working 80x5, 85x5, 90x3');
-    await expect(page.locator('.ls-p1-set')).toHaveCount(5);
-    await expect(page.locator('[data-p1-type="0:0"]')).toHaveValue('warmup');
-    await expect(page.locator('[data-p1-type="0:1"]')).toHaveValue('warmup');
-    await expect(page.locator('[data-p1-type="0:2"]')).toHaveValue('working');
+    expect(await page.evaluate(()=>state.aiParsed.items.filter(i=>i.kind==='resistance').reduce((n,i)=>n+(i.sets?.length||0),0))).toBe(5);
+    expect(await page.evaluate(()=>String(state.aiParsed.items[0].sets[0].setType))).toBe('warmup');
+    expect(await page.evaluate(()=>String(state.aiParsed.items[0].sets[1].setType))).toBe('warmup');
+    expect(await page.evaluate(()=>String(state.aiParsed.items[0].sets[2].setType))).toBe('working');
     await page.locator('[data-action="confirm-ai-workout"]').click();
     await page.reload({waitUntil:'domcontentloaded'});
     await expect(page.locator('.bottom-nav')).toBeVisible();
@@ -215,13 +220,69 @@ test.describe('P1 progressive Smart Log end-to-end',()=>{
   test('compound plus accessory descriptions keep all exercises',async({page})=>{
     await start(page);
     await parse(page,'Bench press 80kg for 8, then 85kg for 6 and 5. Incline dumbbell press 30kg 3x10. Cable fly 15kg 3 sets of 12');
-    await expect(page.locator('.ls-p1-card')).toHaveCount(3);
-    await expect(page.locator('.ls-p1-set')).toHaveCount(9);
+    await expect(page.locator('.ls-mobile-exercise')).toHaveCount(3);
+    expect(await page.evaluate(()=>state.aiParsed.items.filter(i=>i.kind==='resistance').reduce((n,i)=>n+(i.sets?.length||0),0))).toBe(9);
     await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeEnabled();
     await page.locator('[data-action="confirm-ai-workout"]').click();
     const session=resistance(await records(page));
     expect(session.exercises.length).toBe(3);
     expect(session.exercises.map(e=>e.sets.length)).toEqual([3,3,3]);
     expect(session.exercises[0].sets.map(s=>[s.weight,s.reps])).toEqual([[80,8],[85,6],[85,5]]);
+  });
+});
+
+test.describe('Mobile Scan Fix Save additions',()=>{
+  test('system appearance follows device and profile override survives reload',async({page})=>{
+    await page.emulateMedia({colorScheme:'light'});
+    await start(page);
+    await expect(page.locator('html')).toHaveAttribute('data-lastset-theme','light');
+    await page.locator('[data-nav="profile"]').click();
+    await expect(page.locator('#lastset-theme-mode')).toHaveValue('system');
+    await page.locator('#lastset-theme-mode').selectOption('dark');
+    await page.locator('[data-action="save-profile"]').click();
+    await expect(page.locator('html')).toHaveAttribute('data-lastset-theme','dark');
+    await page.reload({waitUntil:'domcontentloaded'});
+    await expect(page.locator('html')).toHaveAttribute('data-lastset-theme','dark');
+    await page.locator('[data-nav="profile"]').click();
+    await page.locator('#lastset-theme-mode').selectOption('system');
+    await page.locator('[data-action="save-profile"]').click();
+    await expect(page.locator('html')).toHaveAttribute('data-lastset-theme','light');
+    await page.emulateMedia({colorScheme:'dark'});
+    await expect(page.locator('html')).toHaveAttribute('data-lastset-theme','dark');
+  });
+  test('unfinished Smart Log can resume after browser reload without saving phantom sets',async({page})=>{
+    await start(page);
+    await parse(page,'Deadlift 140x5 then 150x3 then 160x1');
+    await expect(page.locator('.ls-mobile-exercise')).toHaveCount(1);
+    await page.reload({waitUntil:'domcontentloaded'});
+    await page.locator('[data-nav="day"]').click();
+    await page.locator('[data-day-action="describe"]').first().click();
+    await expect(page.locator('[data-mobile-resume]')).toBeVisible();
+    await page.locator('[data-mobile-resume]').click();
+    await expect(page.locator('.ls-mobile-review')).toBeVisible();
+    const sets=await page.evaluate(()=>state.aiParsed.items[0].sets.map(s=>[s.weightKg,s.reps]));
+    expect(sets).toEqual([[140,5],[150,3],[160,1]]);
+    expect(resistance(await records(page))).toBeUndefined();
+  });
+  test('mixed assisted and bodyweight must collect actual numbers before save',async({page})=>{
+    await start(page);
+    await parse(page,'Deadlift 140x5 then 150x3 then 160x1. Chin ups assisted 3x8 then bodyweight max.');
+    await expect(page.locator('[data-mobile-fix-next]')).toBeVisible();
+    await page.locator('[data-mobile-open="1"]').click();
+    await page.locator('[data-mobile-split="1"]').click();
+    await page.locator('[data-mobile-assisted-type]').selectOption('assisted-pull-up');
+    await page.locator('[data-mobile-body-type]').selectOption('pull-up');
+    await page.locator('[data-mobile-assist-weight]').fill('25');
+    await page.locator('[data-mobile-body-reps]').fill('6');
+    await page.locator('[data-mobile-split-confirm="1"]').click();
+    await expect(page.locator('.ls-mobile-exercise')).toHaveCount(3);
+    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeEnabled();
+    await page.locator('[data-action="confirm-ai-workout"]').click();
+    await expect(page.locator('.ls-mobile-success')).toBeVisible();
+    await page.locator('[data-mobile-today]').click();
+    const session=resistance(await records(page));
+    expect(session.exercises[0].sets.map(s=>[s.weight,s.reps])).toEqual([[140,5],[150,3],[160,1]]);
+    expect(session.exercises[1].sets.map(s=>[s.weight,s.reps])).toEqual([[25,8],[25,8],[25,8]]);
+    expect(session.exercises[2].sets.map(s=>[s.weight,s.reps])).toEqual([[0,6]]);
   });
 });
