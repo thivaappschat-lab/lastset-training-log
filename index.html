@@ -459,8 +459,8 @@ function reportStorageFailure(error){
     banner.id='ls-save-failure';
     banner.setAttribute('role','alert');
     banner.style.cssText='position:fixed!important;z-index:2147483647!important;inset:auto 12px calc(env(safe-area-inset-bottom,0px) + 10px) 12px;max-width:560px;margin:auto;padding:16px;border-radius:16px;border:2px solid #ff808e;background:#29131b;color:#fff;box-shadow:0 12px 36px #000a;font:14px/1.5 system-ui,sans-serif';
-    banner.innerHTML='<strong>Workout NOT saved to device</strong><p style="margin:6px 0 12px">Keep LastSet open. Your latest entries are still in memory but might disappear if you close or refresh. Export an emergency backup now.</p><button type="button" style="padding:11px;border-radius:10px;background:#fff;color:#251221;border:0;font-weight:700">Export emergency backup</button>';
-    banner.querySelector('button').addEventListener('click',()=>{
+    banner.innerHTML='<strong>Workout NOT saved to device</strong><p style="margin:6px 0 12px">Keep LastSet open. Your latest entries are still in memory but might disappear if you close or refresh. Export an emergency backup now.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" data-storage-backup style="padding:11px;border-radius:10px;background:#fff;color:#251221;border:0;font-weight:700">Export emergency backup</button><button type="button" data-storage-retry style="padding:11px;border-radius:10px;background:#a9ff50;color:#17211a;border:0;font-weight:800">Retry saving</button></div>';
+    banner.querySelector('[data-storage-backup]').addEventListener('click',()=>{
       try{
         const snapshot=typeof data!=='undefined'?data:memoryStore;
         if(!snapshot && unreadableStoredData===null) throw new Error('No data to export');
@@ -488,6 +488,20 @@ function reportStorageFailure(error){
         document.body.appendChild(a);a.click();a.remove();
         setTimeout(()=>URL.revokeObjectURL(url),30000);
       }catch(_){ window.alert('Emergency export unavailable. Keep LastSet open and contact support before refreshing.'); }
+    });
+    banner.querySelector('[data-storage-retry]').addEventListener('click',()=>{
+      // A failed Smart Log merge remains in memory. Its wrapper resumes the
+      // original persistence attempt rather than appending sets a second time.
+      // For other save paths, write the current in-memory data only.
+      try{
+        if(typeof state!=='undefined'&&state.aiParsed?.items?.length&&typeof saveSmartLogWorkout==='function'){
+          saveSmartLogWorkout();
+        }else if(typeof saveData==='function'&&typeof data!=='undefined'){
+          saveData(data);
+          document.getElementById('ls-save-failure')?.remove();
+          if(typeof showToast==='function')showToast('Workout storage recovered');
+        }
+      }catch(err){reportStorageFailure(err);}
     });
     document.body.appendChild(banner);
   };
