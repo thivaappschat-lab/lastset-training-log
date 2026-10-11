@@ -21,6 +21,17 @@ function applyTheme(){
   if(meta)meta.content=dark?'#090713':'#f5f6fb';
 }
 prefersDark?.addEventListener?.('change',applyTheme);
+function adjustKeyboard(){
+  const vv=window.visualViewport;
+  const overlap=vv?Math.max(0,window.innerHeight-vv.height-vv.offsetTop):0;
+  const open=overlap>125&&document.activeElement?.matches?.('input,textarea,select');
+  document.documentElement.classList.toggle('ls-mobile-keyboard-open',!!open);
+  document.documentElement.style.setProperty('--ls-keyboard-offset',(open?overlap:0)+'px');
+}
+window.visualViewport?.addEventListener('resize',adjustKeyboard);
+window.visualViewport?.addEventListener('scroll',adjustKeyboard);
+document.addEventListener('focusin',()=>requestAnimationFrame(adjustKeyboard));
+document.addEventListener('focusout',()=>requestAnimationFrame(adjustKeyboard));
 function draftSnapshot(){
   const text=document.getElementById('ai-text')?.value??state.aiDraft;
   if(typeof text!=='string')return null;
