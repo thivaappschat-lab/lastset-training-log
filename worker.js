@@ -15,7 +15,8 @@ const STYLE_TAGS = [
   ["/lastset-explore.css","0290"],
   ["/lastset-diagnostics.css","0300"],
   ["/lastset-mobility.css","0300"],
-  ["/lastset-anatomy.css","0280"]
+  ["/lastset-anatomy.css","0280"],
+  ["/lastset-smartlog-mobile.css","0160"]
 ];
 
 const SCRIPT_TAGS = [
@@ -42,7 +43,8 @@ const SCRIPT_TAGS = [
   ["/lastset-anatomy.js","0282"],
   ["/lastset-explore.js","0290"],
   ["/lastset-mobility.js","0300"],
-  ["/lastset-smartlog-p1.js","0150"]
+  ["/lastset-smartlog-p1.js","0150"],
+  ["/lastset-smartlog-mobile.js","0160"]
 ];
 
 async function getReleaseId(env){
