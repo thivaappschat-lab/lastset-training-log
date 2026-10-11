@@ -198,10 +198,8 @@ function decorateToday(){
   section.innerHTML='<div class="ls-p2-section-title"><strong>Log your training</strong><small>Choose a category · timers optional</small></div>'+
    '<div class="ls-p2-grid">'+Object.entries(catNames).map(([id,label])=>'<button data-p2-entry="'+id+'"><span class="ls-p2-grid-icon">'+({resistance:'🏋️',cardio:'🏃',mobility:'🧘',smart:'🎙️'}[id])+'</span><strong>'+esc(label)+'</strong><small>'+({resistance:'Weights, reps and sets',cardio:'Running, cycling and more',mobility:'Yoga, stretching and recovery',smart:'Type or speak your workout'}[id])+'</small></button>').join('')+'</div>'+
    (active()?'<div class="ls-p2-resume"><strong>Unfinished '+esc(catNames[active().category])+' workout</strong><button data-p2-resume>Resume draft →</button></div>':'')+
-   '<details class="ls-p2-classic"><summary>Classic quick-log shortcuts</summary><p>Original P1 logging remains available below.</p></details>';
+   '<div class="ls-p2-classic"><strong>Original quick-log shortcuts</strong><p>Keep using the proven P1 logging paths below, or choose the new P2 cards above.</p></div>';
   main.insertBefore(section,list);
-  const details=section.querySelector('.ls-p2-classic');
-  details.appendChild(list);
 }
 function go(v){message='';state.view=v;render();}
 function open(id){
