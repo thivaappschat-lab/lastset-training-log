@@ -36,7 +36,9 @@ jobs:
         with:
           node-version: 22
       - name: Test gym language parser independently
-        run: node tests/p1-gym-language-smoke.js
+        run: |
+          node tests/p1-gym-language-smoke.js
+          node tests/p1-source-boundary-smoke.js
       - name: Install browser QA dependencies
         run: npm install --no-audit --no-fund
       - name: Install browsers
