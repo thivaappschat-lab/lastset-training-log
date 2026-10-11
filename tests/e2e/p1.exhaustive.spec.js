@@ -1,4 +1,9 @@
 // P1 exhaustive audit storage-recovery rerun: verifies emergency warning survives partial registry writes.
+async function openSmartQuick(page){
+  await page.locator('[data-p2-entry="smart"]').click();
+  await page.locator('[data-p2-mode="quick"]').click();
+  await page.locator('[data-p2-blank]').click();
+}
 const {test,expect}=require('@playwright/test');
 const KEY='lastset-data-v1';
 const REGISTRY='lastset-user-spaces-v1';
@@ -17,7 +22,7 @@ async function start(page){
 }
 async function describe(page){
   await page.locator('.bottom-nav [data-nav="day"]').click();
-  await page.locator('[data-day-action="describe"]').first().click();
+  await openSmartQuick(page);
   await expect(page.locator('#ai-text')).toBeVisible();
 }
 async function parse(page,text){
