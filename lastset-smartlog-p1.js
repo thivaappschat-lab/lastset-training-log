@@ -1,6 +1,6 @@
 (() => {
 'use strict';
-const VERSION='0.15.0-p1';
+const VERSION='0.16.5.1-p1-memory-direct-edit';
 const safe=v=>String(v??'');
 const number=v=>Number.isFinite(Number(v))?Number(v):null;
 const toKg=(w,unit,defaultUnit='kg')=>{
