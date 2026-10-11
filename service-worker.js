@@ -50,6 +50,8 @@ const ASSETS = [
   './lastset-smartlog-p1.js',
   './lastset-smartlog-mobile.js',
   './lastset-smartlog-mobile.css',
+  './lastset-p2.css',
+  './lastset-p2.js',
   './assets/anatomy-front.webp',
   './assets/anatomy-back.webp',
   './assets/anatomy-female-front.webp',
@@ -133,7 +135,8 @@ function enhanceHtml(text) {
     ['./lastset-explore.css','0290'],
     ['./lastset-diagnostics.css','0300'],
     ['./lastset-mobility.css','0300'],
-    ['./lastset-anatomy.css','0211']
+    ['./lastset-anatomy.css','0211'],
+    ['./lastset-p2.css','0200']
   ];
   const scripts = [
     ['./lastset-enhancements.js','0132'],
@@ -158,7 +161,8 @@ function enhanceHtml(text) {
     ['./lastset-atlas-regions.js','0210'],
     ['./lastset-anatomy.js','0210'],
     ['./lastset-explore.js','0290'],
-    ['./lastset-mobility.js','0300']
+    ['./lastset-mobility.js','0300'],
+    ['./lastset-p2.js','0200']
   ];
 
   for(const [path,version] of styles){
