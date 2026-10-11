@@ -1,0 +1,46 @@
+name: LastSet P1 Storage Recovery Focus
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'lastset-smartlog-mobile.js'
+      - 'tests/e2e/p1.exhaustive.spec.js'
+      - '.github/workflows/p1-storage-focus.yml'
+permissions:
+  contents: read
+concurrency:
+  group: lastset-p1-storage-focus
+  cancel-in-progress: true
+jobs:
+  storage-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: 'true'
+      LASTSET_BASE_URL: http://127.0.0.1:4173/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium webkit
+      - run: bash build-cloudflare.sh
+      - name: Serve isolated LastSet build
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory dist > /tmp/p1-storage.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4173/ | grep -q lastset-release && exit 0; sleep 1; done
+          exit 1
+      - name: Test storage failures and retries
+        run: npx playwright test tests/e2e/p1.exhaustive.spec.js --project=mobile-chromium --project=mobile-webkit --grep "P1 transactional save under storage failures" --retries=0 --timeout=30000
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lastset-storage-focus
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 3
+          if-no-files-found: ignore
