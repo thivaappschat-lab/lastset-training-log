@@ -22,11 +22,6 @@ function reviewWarnings(text){
 function parseProgressivePhrase(text,loadType='external',defaultUnit='kg'){
   const type=safe(loadType).toLowerCase();
   if(type==='timed')return null;
-  if(type==='assisted'){
-    const warnings=reviewWarnings(text);
-    if(/\bbodyweight\b/i.test(safe(text)))warnings.push('Assistance and bodyweight are different loading modes. Review or split these sets.');
-    return warnings.length?{sets:[],warnings:unique(warnings),recognized:false}:null;
-  }
   const raw=safe(text);
   if(!raw.trim())return null;
   const WORD_NUMBERS={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,twelve:12,fifteen:15};
@@ -41,6 +36,26 @@ function parseProgressivePhrase(text,loadType='external',defaultUnit='kg'){
     return {sets:[],warnings:unique([...warnings,'Assisted and bodyweight/failure sets need separate explicit loads and reps. Do not interpret the set count as kilograms.']),recognized:false};
   }
   const weightUnit='(?:kg|kgs?|kilos?|lb|lbs|pounds?)';
+  // A spoken set COUNT is not an additional rep count. Normalize explicit
+  // phrases before the progressive "50 for 3, 4" parser can misread them:
+  // "50 kg for three, four sets" → 4 sets of 3,
+  // "50 kg assistance for seven, three sets" → 3 sets of 7.
+  // Apply only when the word "sets" is explicit: "50 for 3, 4" remains
+  // a progressive sequence. Avoid overriding mixed-assisted ambiguity above.
+  const spokenRepThenSets=new RegExp('\\b(\\d+(?:\\.\\d+)?)\\s*('+weightUnit+')\\b(?:\\s+(?:assistance|assist))?\\s*(?:for\\s+|at\\s+)?(\\d{1,3})\\s*(?:reps?|repetitions?)?\\s*(?:[,;]\\s*|\\s+)(?:for\\s+)?(\\d{1,2})\\s*sets?\\b','i');
+  const spokenSetsThenRep=new RegExp('\\b(\\d+(?:\\.\\d+)?)\\s*('+weightUnit+')\\b(?:\\s+(?:assistance|assist))?\\s*(\\d{1,2})\\s*sets?\\s*(?:of|at|for|x|×)?\\s*(\\d{1,3})\\s*(?:reps?)?\\b','i');
+  const spoken=spokenRepThenSets.exec(t)||spokenSetsThenRep.exec(t);
+  if(spoken){
+    const count=Number(spokenRepThenSets.test(t)?spoken[4]:spoken[3]);
+    const reps=Number(spokenRepThenSets.test(t)?spoken[3]:spoken[4]);
+    const w=toKg(spoken[1],spoken[2],defaultUnit);
+    if(w!==null&&Number.isInteger(count)&&count>=1&&count<=20&&Number.isInteger(reps)&&reps>=1&&reps<=500){
+      return {sets:Array.from({length:count},()=>({weightKg:w,reps,setType:'working'})),warnings,recognized:true};
+    }
+  }
+  if(type==='assisted'){
+    return warnings.length?{sets:[],warnings:unique(warnings),recognized:false}:null;
+  }
   const counted=new RegExp('(?:^|\\s)\\+?(\\d+(?:\\.\\d+)?)\\s*('+weightUnit+'|s)?\\s+(\\d{1,2})\\s*(?:[x×]|sets?\\s*(?:of)?)\\s*(\\d{1,3})(?!\\d)','i');
   // 30s / 20s mean per dumbbell, not seconds, only with a 3x10-like scheme.
   const countMatch=counted.exec(t);
@@ -106,7 +121,19 @@ function parseProgressivePhrase(text,loadType='external',defaultUnit='kg'){
 function buildSmartLogSourceInventory(source,mentions,defaultUnit='kg'){
   const text=safe(source);
   const found=(mentions||[]).slice().sort((a,b)=>a.start-b.start);
-  const candidates=found.map(m=>({start:m.start,end:m.end,exercise:m.exercise||null,alias:m.alias||'',ambiguity:null,recognised:true}));
+  const candidates=found.map(m=>{
+    const preceding=text.slice(Math.max(0,m.start-32),m.start);
+    const misheard=/\\bmy\\s+sister\\s*$/i.exec(preceding);
+    if(m.exercise?.id==='triceps-dip'&&misheard){
+      // The recognizer sometimes renders "assisted dip" as "my sister Dip".
+      // Keep this as a boundary and force exercise selection; never infer
+      // Triceps Dip or Assisted Dip from that ASR artifact.
+      return {start:m.start-misheard[0].length,end:m.end,exercise:null,
+        alias:'my sister dip',ambiguity:'unidentified',recognised:false,
+        asrHint:'Possible speech recognition error near "my sister Dip". Choose the actual dip variation before saving.'};
+    }
+    return {start:m.start,end:m.end,exercise:m.exercise||null,alias:m.alias||'',ambiguity:null,recognised:true};
+  });
   const overlaps=(start,end)=>candidates.some(m=>start<m.end&&end>m.start);
   const addUnknown=(start,end,ambiguity,alias='')=>{
     if(!overlaps(start,end))candidates.push({start,end,ambiguity,alias,exercise:null});
@@ -156,7 +183,8 @@ function buildSmartLogSourceInventory(source,mentions,defaultUnit='kg'){
     const warnings=unique([
       ...(parsed.warnings||[]),
       ...(candidate.ambiguity==='squat'?['Squat type was not specified. Choose the exercise before saving.']:[]),
-      ...(candidate.ambiguity==='unidentified'?['This exercise needs identification. Verify its sets before saving.']:[])
+      ...(candidate.ambiguity==='unidentified'?['This exercise needs identification. Verify its sets before saving.']:[]),
+      ...(candidate.asrHint?[candidate.asrHint]:[])
     ]);
     return {...candidate,source:phrase,sets:parsed.sets,warnings,
       sourceStart:candidate.start,needsRewrite:mixedAssistance};
