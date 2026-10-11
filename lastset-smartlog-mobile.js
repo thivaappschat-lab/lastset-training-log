@@ -148,6 +148,9 @@ function sheetHtml(parsed,i){
 const baseReview=aiParsedHtml;
 aiParsedHtml=function(parsed){
   if(!parsed?.items?.some(item=>item?.p1Review))return baseReview(parsed);
+  // Mixed resistance/cardio sessions continue through the established review
+  // until a dedicated cardio editor is available. Never show a false "All clear".
+  if(parsed.items.some(item=>item.kind!=='resistance'))return baseReview(parsed);
   return renderMobile(parsed);
 };
 function resumeBanner(){
@@ -168,8 +171,12 @@ function successBanner(){
 }
 const baseRender=render;
 render=function(){
-  applyTheme();
+  // Dismiss the blocking sheet automatically once its last real issue is fixed.
+  if(sheetIndex>=0 && state.aiParsed && !issue(state.aiParsed.items?.[sheetIndex]||{}) && !state.aiParsed.p1AuditError)sheetIndex=-1;
   baseRender();
+  // Legacy LastSet enhancement marks its decorative theme as "amirtha" on
+  // every render. Apply actual device appearance *after* that layer.
+  applyTheme();
   resumeBanner();
   successBanner();
   document.documentElement.dataset.lastsetSmartlogMobile=VERSION;
