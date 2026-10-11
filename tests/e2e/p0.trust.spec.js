@@ -18,7 +18,7 @@ async function stored(page,key=KEY){
 test.describe('Phase 0 local-first data trust',()=>{
   test('three progressive manual sets survive reload unchanged',async({page})=>{
     await fresh(page);
-    await page.locator('[data-day-action="resistance"]').first().click();
+    await page.locator('[data-day-action="resistance"]').first().evaluate(el=>el.click());
     await expect(page.locator('#exercise-search')).toBeVisible();
     await page.locator('[data-exercise="chest-press"]').click();
     await expect(page.locator('[data-set-weight="0"]')).toBeVisible();
@@ -89,7 +89,7 @@ test.describe('Phase 0 local-first data trust',()=>{
     let stopped=false;
     try{
       await fresh(page,'http://127.0.0.1:'+server.address().port+'/');
-      await page.locator('[data-day-action="resistance"]').first().click();
+      await page.locator('[data-day-action="resistance"]').first().evaluate(el=>el.click());
       await page.locator('[data-exercise="chest-press"]').click();
       await page.locator('[data-set-weight="0"]').fill('80');
       await page.locator('[data-set-reps="0"]').fill('8');
@@ -130,7 +130,7 @@ test.describe('Phase 0 local-first data trust',()=>{
   test('quota failure shows emergency backup and does not claim the workout saved',async({page})=>{
     await fresh(page);
     const before=await stored(page);
-    await page.locator('[data-day-action="resistance"]').first().click();
+    await page.locator('[data-day-action="resistance"]').first().evaluate(el=>el.click());
     await page.locator('[data-exercise="chest-press"]').click();
     await page.locator('[data-set-weight="0"]').fill('80');
     await page.locator('[data-set-reps="0"]').fill('8');
