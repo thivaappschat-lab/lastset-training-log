@@ -235,7 +235,9 @@ parseSmartWorkout=function(text){
       // Keeping a legacy set when the new segmented parser returns nothing
       // would reintroduce the invented 3 kg × 8 Deadlift set.
       if(entry.sets.length)item.sets=entry.sets;
-      else if(entry.needsRewrite || /(?:\bassist(?:ed|ance)?\b|\bmax\b)/i.test(entry.source))item.sets=[];
+      else if(entry.needsRewrite || /\bmax\b/i.test(entry.source) ||
+        (/\bassist(?:ed|ance)?\b/i.test(entry.source) &&
+         !/\b\d+(?:\.\d+)?\s*(?:kg|kgs?|kilos?|lb|lbs|pounds?)\s+\d{1,3}\s+reps?\s+\d{1,2}\s+sets?\b/i.test(entry.source)))item.sets=[];
       else if(ex && typeof parseExerciseSetsV11==='function'){
         const fallback=parseExerciseSetsV11(ex,entry.source);
         item.sets=Array.isArray(fallback)?fallback:[];
