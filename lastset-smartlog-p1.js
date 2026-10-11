@@ -219,6 +219,11 @@ parseSmartWorkout=function(text){
     // Never move cardio records into resistance or drop original items.
     result.items.sort((a,b)=>(a.p1SourceStart??Number.MAX_SAFE_INTEGER)-(b.p1SourceStart??Number.MAX_SAFE_INTEGER));
     result.p1DetectedExerciseCount=result.items.filter(item=>item.kind==='resistance').length;
+    if(result.items.some(item=>item.kind==='resistance'&&!item.exerciseId)){
+      result.confidence=Math.min(Number(result.confidence)||0.5,0.54);
+      result.needsConfirmation=true;
+      result.clarification='An exercise requires identification before this workout can be saved.';
+    }
   }catch(err){
     console.warn('Smart Log P1 exercise inventory failed safely',err);
     result.p1AuditError=true;
@@ -244,7 +249,7 @@ aiParsedHtml=function(parsed){
       return '<div class="ls-p1-set"><span>Set '+(j+1)+'</span>'+fields+'<label>Type<select data-p1-type="'+ii+':'+j+'"><option value="working" '+(s.setType!=='warmup'?'selected':'')+'>Working</option><option value="warmup" '+(s.setType==='warmup'?'selected':'')+'>Warm-up</option></select></label><button type="button" data-p1-remove="'+ii+':'+j+'" aria-label="Remove set '+(j+1)+'">×</button></div>';
     }).join('');
     const warn=marked.length?'<div class="ai-clarify"><strong>Review before saving</strong><div>'+marked.map(w=>escape(w)).join(' · ')+'</div><label class="ls-p1-ack"><input type="checkbox" data-p1-ack="'+ii+'" '+(item.p1Acknowledged?'checked':'')+'> I reviewed these details; keep the original wording in notes</label></div>':'';
-    return '<section class="ai-activity ls-p1-card" data-p1-exercise="'+ii+'">'+heading+rows+'<button class="secondary ls-p1-add" type="button" data-p1-add="'+ii+'">＋ Add missing set</button>'+warn+'</section>';
+    return '<section class="ai-activity ls-p1-card" data-p1-card="'+ii+'">'+heading+rows+'<button class="secondary ls-p1-add" type="button" data-p1-add="'+ii+'">＋ Add missing set</button>'+warn+'</section>';
   }).join('');
   const exerciseCount=parsed.items.filter(item=>item.kind==='resistance').length;
   const unrecognised=parsed.items.filter(item=>item.kind==='resistance'&&!item.exerciseId).length;
