@@ -68,9 +68,21 @@ async function todayIso(page) {
   });
 }
 
+
+// P2 exposes one public Today chooser. These legacy checks intentionally
+// exercise the retained P1 engine without rendering duplicate public controls.
+async function legacyDayAction(page,action){
+  await page.locator('[data-day-action="'+action+'"]').first().evaluate(el=>el.click());
+}
+async function openSmartQuick(page){
+  await page.locator('[data-p2-entry="smart"]').click();
+  await page.locator('[data-p2-mode="quick"]').click();
+  await page.locator('[data-p2-blank]').click();
+}
+
 async function goToday(page) {
   await page.locator('[data-nav="day"]').click();
-  await expect(page.locator('[data-day-action="resistance"]').first()).toBeVisible();
+  await expect(page.locator('[data-p2-entry="resistance"]')).toBeVisible();
 }
 
 async function goProfile(page) {
@@ -80,7 +92,7 @@ async function goProfile(page) {
 
 async function openExercise(page, exerciseId) {
   await goToday(page);
-  await page.locator('[data-day-action="resistance"]').first().click();
+  await legacyDayAction(page,'resistance');
   await expect(page.locator('#exercise-search')).toBeVisible();
   await page.locator(`[data-exercise="${exerciseId}"]`).click();
   await expect(page.locator('[data-action="save-exercise"]')).toBeVisible();
@@ -92,7 +104,7 @@ async function logExternalExercise(page, exerciseId, weight, reps) {
   await page.locator('[data-set-reps="0"]').fill(String(reps));
   await page.locator('[data-action="save-exercise"]').click();
   await waitForSessionType(page, 'resistance');
-  await expect(page.locator('[data-day-action="describe"]')).toBeVisible();
+  await expect(page.locator('[data-p2-entry="smart"]')).toBeVisible();
 }
 
 async function createUserKeepingCurrent(page, name) {
@@ -129,23 +141,23 @@ async function saveProfileValues(page, { displayName, bodyWeight, height, gender
 
 async function runSmartLog(page, text, expectedType) {
   await goToday(page);
-  await page.locator('[data-day-action="describe"]').click();
+  await openSmartQuick(page);
   await expect(page.locator('#ai-text')).toBeVisible();
   await page.locator('#ai-text').fill(text);
   await page.locator('[data-action="parse-ai"]').click();
   await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeVisible({ timeout: 8_000 });
   await page.locator('[data-action="confirm-ai-workout"]').click();
   await waitForSessionType(page, expectedType);
-  await expect(page.locator('[data-day-action="describe"]')).toBeVisible();
+  await expect(page.locator('[data-p2-entry="smart"]')).toBeVisible();
 }
 
 test.describe('LastSet production v0.14.0', () => {
   test('Mobility is a visible primary category, while Machine Scan remains hidden',async ({page})=>{
     await goToday(page);
-    await expect(page.locator('[data-day-action="mobility"]')).toBeVisible();
-    await expect(page.locator('[data-day-action="mobility"]')).toContainText('Mobility');
+    await expect(page.locator('[data-p2-entry="mobility"]')).toBeVisible();
+    await expect(page.locator('[data-p2-entry="mobility"]')).toContainText('Mobility');
     expect(await page.locator('[data-day-action="scan"]').count()).toBe(0);
-    await page.locator('[data-day-action="mobility"]').click();
+    await legacyDayAction(page,'mobility');
     await expect(page.locator('[data-mobility-activity="Yoga"]')).toBeVisible();
     await expect(page.locator('[data-mobility-activity="Pilates"]')).toBeVisible();
     await expect(page.locator('[data-mobility-activity="Stretching"]')).toBeVisible();
@@ -156,7 +168,7 @@ test.describe('LastSet production v0.14.0', () => {
   test('Yoga saves, edits and tracks as mobility without changing cardio totals',async ({page})=>{
     await goToday(page);
     const today=await todayIso(page);
-    await page.locator('[data-day-action="mobility"]').click();
+    await legacyDayAction(page,'mobility');
     await page.locator('[data-mobility-activity="Yoga"]').click();
     await page.locator('#mobility-style').selectOption('Vinyasa');
     await page.locator('#mobility-duration').fill('45');
@@ -185,11 +197,11 @@ test.describe('LastSet production v0.14.0', () => {
   test('Mobility sessions prevent an accidental Rest Day and keep existing training intact',async ({page})=>{
     await goToday(page);
     const before=await storedData(page);
-    await page.locator('[data-day-action="mobility"]').click();
+    await legacyDayAction(page,'mobility');
     await page.locator('[data-mobility-activity="Stretching"]').click();
     await page.locator('#mobility-duration').fill('20');
     await page.locator('[data-action="save-mobility"]').click();
-    await page.locator('[data-day-action="rest"]').click();
+    await page.locator('[data-p2-mark-rest]').click();
     await expect(page.locator('.toast')).toContainText('Training is already logged');
     const d=await storedData(page);
     expect(Object.values(d.sessions||{}).flat().some(x=>x.type==='rest')).toBeFalsy();
@@ -199,7 +211,7 @@ test.describe('LastSet production v0.14.0', () => {
 
   test('Smart Log identifies yoga and asks for missing session duration',async ({page})=>{
     await goToday(page);
-    await page.locator('[data-day-action="describe"]').click();
+    await openSmartQuick(page);
     await page.locator('#ai-text').fill('Did Vinyasa yoga this morning');
     await page.locator('[data-action="parse-ai"]').click();
     await expect(page.locator('.ls-mobility-preview')).toBeVisible();
@@ -262,7 +274,7 @@ test.describe('LastSet production v0.14.0', () => {
     const iso = await todayIso(page);
     await page.locator(`[data-date="${iso}"]`).click();
 
-    await page.locator('[data-day-action="resistance"]').first().click();
+    await legacyDayAction(page,'resistance');
     await expect(page.locator('#exercise-search')).toBeVisible();
     await page.locator('[data-exercise="chest-press"]').click();
     await expect(page.locator('[data-action="save-exercise"]')).toBeVisible();
@@ -271,7 +283,7 @@ test.describe('LastSet production v0.14.0', () => {
     await expect(page.locator('#exercise-search')).toBeVisible();
 
     await page.locator('[data-action="back"]').click();
-    await expect(page.locator('[data-day-action="resistance"]').first()).toBeVisible();
+    await expect(page.locator('[data-p2-entry="resistance"]')).toBeVisible();
 
     await page.locator('[data-action="back"]').click();
     await expect(page.locator('.calendar-grid')).toBeVisible();
@@ -630,7 +642,7 @@ test.describe('LastSet production v0.14.0', () => {
     await expect(page.locator('.ls-offline-pill')).toContainText('Offline');
 
     await page.locator('[data-nav="day"]').click();
-    await expect(page.locator('[data-day-action="resistance"]').first()).toBeVisible();
+    await expect(page.locator('[data-p2-entry="resistance"]')).toBeVisible();
 
     await page.locator('[data-nav="explore"]').click();
     await expect(page.getByRole('heading', { name: 'Muscle Explorer' })).toBeVisible();
@@ -644,7 +656,7 @@ test.describe('LastSet production v0.14.0', () => {
 
   test('equipment filters and aliases find the new v0.13.0 exercise variants', async ({ page }) => {
     await goToday(page);
-    await page.locator('[data-day-action="resistance"]').first().click();
+    await legacyDayAction(page,'resistance');
 
     await page.locator('#equipment-filter').selectOption({ label: 'EZ Bar' });
     await page.locator('#exercise-search').fill('easy curl bar');
@@ -728,7 +740,7 @@ test.describe('LastSet production v0.14.0', () => {
     const card = page.locator('.ls-workout-card').filter({ hasText: 'QA Push' });
     await expect(card).toBeVisible();
     await card.locator('[data-template-start]').click();
-    await expect(page.locator('[data-day-action="resistance"]').first()).toBeVisible();
+    await expect(page.locator('[data-p2-entry="resistance"]')).toBeVisible();
 
     const iso = await todayIso(page);
     const data = await storedData(page);
@@ -884,7 +896,7 @@ test.describe('LastSet production v0.14.0', () => {
     await expect(page.locator('.bottom-nav')).toBeVisible();
 
     await goToday(page);
-    await page.locator('[data-day-action="describe"]').click();
+    await openSmartQuick(page);
     await page.locator('#ai-text').fill('bench press same as last time');
     await page.locator('[data-action="parse-ai"]').click();
 
