@@ -55,12 +55,11 @@ function begin(source){
   }
   if(category==='smart'&&mode==='quick'){
     let words='';
-    if(source?.kind==='historical')words=(source.sessions||[]).flatMap(s=>{
-      if(s.type==='resistance')return (s.exercises||[]).map(e=>e.name+' '+(e.sets||[]).map(v=>(v.weight??0)+' kg for '+(v.reps??0)+' reps').join(', '));
-      if(s.type==='cardio')return [s.activity+' '+s.duration+' minutes'+(s.distance?' '+s.distance+' km':'')];
-      if(s.type==='mobility')return [s.activity+' '+s.duration+' minutes'];
+    if(source?.kind==='historical')words='Previous activities (REFERENCE ONLY): '+(source.sessions||[]).flatMap(s=>{
+      if(s.type==='resistance')return (s.exercises||[]).map(e=>e.name);
+      if(s.type==='cardio'||s.type==='mobility')return [s.activity||s.type];
       return [];
-    }).join('. ');
+    }).join(', ')+'. Replace this note with what you actually completed today, including sets, reps, load and duration.';
     if(source?.kind==='template')words='Planned exercises: '+(source.template.exerciseIds||[]).map(id=>EXERCISES.find(e=>e.id===id)?.name||id).join(', ')+'. Add what you actually completed.';
     clear();
     state.aiDraft=words;state.aiParsed=null;state.aiError='';state.view='describe';render();return;
@@ -107,7 +106,7 @@ function timerHtml(){
   if(!draft||draft.mode!=='timed')return '';
   const left=Math.max(0,draft.restUntil-Date.now());
   return '<section class="ls-p2-timer" aria-label="Optional timer"><div><span>SESSION TIME</span><strong data-p2-elapsed>'+duration(elapsed())+'</strong></div>'+
-    (draft.category==='resistance'?'<div><span>REST COUNTDOWN</span><strong data-p2-rest>'+duration(left)+'</strong></div><label>Rest target <select data-p2-rest-seconds><option value="60" '+(draft.restSeconds===60?'selected':'')+'>60 sec</option><option value="90" '+(draft.restSeconds===90?'selected':'')+'>90 sec</option><option value="120" '+(draft.restSeconds===120?'selected':'')+'>120 sec</option><option value="180" '+(draft.restSeconds===180?'selected':'')+'>180 sec</option></select></label><button class="secondary" data-p2-skip-rest>Skip rest</button>':'<small>Elapsed time is informational. Confirm actual activity duration before finishing.</small>')+
+    ((draft.category==='resistance'||(draft.category==='smart'&&draft.exercises.some(e=>e.sets.length)))?'<div><span>REST COUNTDOWN</span><strong data-p2-rest>'+duration(left)+'</strong></div><label>Rest target <select data-p2-rest-seconds><option value="60" '+(draft.restSeconds===60?'selected':'')+'>60 sec</option><option value="90" '+(draft.restSeconds===90?'selected':'')+'>90 sec</option><option value="120" '+(draft.restSeconds===120?'selected':'')+'>120 sec</option><option value="180" '+(draft.restSeconds===180?'selected':'')+'>180 sec</option></select></label><button class="secondary" data-p2-skip-rest>Skip rest</button>':'<small>Elapsed time is informational. Confirm actual activity duration before finishing.</small>')+
     '<button class="secondary" data-p2-pause>'+(draft.pausedAt?'Resume':'Pause')+' session clock</button></section>';
 }
 function exRow(item,idx){
@@ -205,7 +204,7 @@ function decorateToday(){
 function go(v){message='';state.view=v;render();}
 function open(id){
   const old=active();
-  if(old){if(!window.confirm('You have an unfinished '+catNames[old.category]+' workout. Resume it instead of starting another? Press OK to resume, Cancel to stay with it.')){go('p2-workout');return;}go('p2-workout');return;}
+  if(old){go('p2-workout');return;}
   category=id;mode='quick';sourceTab='previous';exerciseSearch='';go('p2-mode');
 }
 function chooseMode(id){mode=id;sourceTab='previous';go('p2-sources');}
@@ -300,6 +299,7 @@ function acceptSmart(){
       style:it.style||'',intensity:it.intensity||'Gentle',notes:it.notes||''});
     }
   }
+  if(d.mode==='timed'&&p.items.some(it=>it.kind==='resistance'))d.restUntil=Date.now()+d.restSeconds*1000;
   d.smartCandidate=null;d.smartText='';d.copied=false;d.confirmed=true;persist();message='Reviewed results added to your draft.';render();
 }
 function parseSmart(){
