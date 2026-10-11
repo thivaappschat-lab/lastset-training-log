@@ -286,8 +286,10 @@ function applyQuick(i){
     setType:previous[j]?.setType||'working'
   }));
   if(item.p1Warnings?.length)item.p1Acknowledged=false;
-  writeDraft();
   render();
+  // Snapshot after rendering the new rows; old inputs must not overwrite
+  // the freshly applied values in the recovered draft.
+  writeDraft();
 }
 function saveLearnedAliases(exercises){
   if(!exercises.length)return;
