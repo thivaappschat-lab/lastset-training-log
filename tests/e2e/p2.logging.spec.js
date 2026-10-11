@@ -15,6 +15,11 @@ async function fresh(page){
 async function choose(page,category,mode,source='blank'){
  await page.locator('.bottom-nav [data-nav="day"]').click();
  await page.locator('[data-p2-entry="'+category+'"]').click();
+ if(category==='resistance'){
+  await expect(page.locator('.ls-exercise-hero')).toBeVisible();
+  await expect(page.locator('[data-exercise="bench-press"]')).toBeVisible();
+  await page.locator('[data-exercise="bench-press"]').click();
+ }
  await expect(page.locator('[data-p2-mode="'+mode+'"]')).toBeVisible();
  await page.locator('[data-p2-mode="'+mode+'"]').click();
  await expect(page.locator('[data-p2-blank]')).toBeVisible();
@@ -26,7 +31,9 @@ async function choose(page,category,mode,source='blank'){
 async function db(page){return page.evaluate(key=>JSON.parse(localStorage.getItem(key)),STORE)}
 async function sessions(page){return Object.values((await db(page)).sessions||{}).flat()}
 async function addBench(page,w='60',r='8',n='1'){
- await page.locator('[data-p2-exercise="bench-press"]').click();
+ if(!(await page.locator('.ls-p2-exercise').filter({hasText:'Bench Press'}).count())){
+  await page.locator('[data-p2-exercise="bench-press"]').click();
+ }
  await page.locator('[data-p2-add-weight="0"]').fill(w);
  await page.locator('[data-p2-add-reps="0"]').fill(r);
  const count=page.locator('[data-p2-add-count="0"]');if(await count.count())await count.fill(n);
@@ -56,7 +63,7 @@ async function seed(page){
 }
 
 test.describe('P2 four-category logging modes and safe source reuse',()=>{
- test('Today keeps the existing hero, original quick logging actions and four new categories',async({page})=>{
+ test('Today keeps the hero and one visible group of four correctly routed categories',async({page})=>{
   await fresh(page);
   await expect(page.locator('.ls-hero')).toHaveCount(1);
   expect(await page.evaluate(()=>{
@@ -65,11 +72,42 @@ test.describe('P2 four-category logging modes and safe source reuse',()=>{
   })).toBe(true);
   for(const category of ['resistance','cardio','mobility','smart']){
    await expect(page.locator('[data-p2-entry="'+category+'"]')).toBeVisible();
-   await expect(page.locator('[data-day-action="'+(category==='smart'?'describe':category)+'"]')).toBeVisible();
+   await expect(page.locator('[data-day-action="'+(category==='smart'?'describe':category)+'"]')).toBeHidden();
    await page.locator('[data-p2-entry="'+category+'"]').click();
+   if(category==='resistance'){
+    await expect(page.locator('.ls-exercise-hero')).toBeVisible();
+    await page.locator('[data-exercise="bench-press"]').click();
+   }
+   await expect(page.locator('.ls-p2-page-head h2')).toContainText(category==='resistance'?'Bench Press':category==='cardio'?'Cardio':category==='mobility'?'Mobility':'Smart Log');
    for(const m of ['quick','free','timed'])await expect(page.locator('[data-p2-mode="'+m+'"]')).toBeVisible();
    await page.locator('[data-p2-back]').click();
+   await page.locator('.bottom-nav [data-nav="day"]').click();
   }
+ });
+
+ test('an unfinished Resistance draft does not hijack Cardio, Mobility or Smart Log',async({page})=>{
+   await fresh(page);await choose(page,'resistance','free');await addBench(page);
+   await page.locator('.bottom-nav [data-nav="day"]').click();
+   await page.locator('[data-p2-entry="cardio"]').click();
+   await expect(page.locator('.ls-p2-page-head h2')).toHaveText('Cardio');
+   await page.locator('[data-p2-mode="free"]').click();await page.locator('[data-p2-blank]').click();
+   await expect(page.locator('[data-p2-field="cardio.duration"]')).toBeVisible();
+   await page.locator('.bottom-nav [data-nav="day"]').click();
+   await page.locator('[data-p2-entry="mobility"]').click();
+   await expect(page.locator('.ls-p2-page-head h2')).toHaveText('Mobility & Recovery');
+   await page.locator('[data-p2-mode="free"]').click();await page.locator('[data-p2-blank]').click();
+   await expect(page.locator('[data-p2-field="mobility.duration"]')).toBeVisible();
+   await page.locator('.bottom-nav [data-nav="day"]').click();
+   await page.locator('[data-p2-entry="smart"]').click();
+   await expect(page.locator('.ls-p2-page-head h2')).toHaveText('Smart Log');
+   await page.locator('[data-p2-mode="free"]').click();await page.locator('[data-p2-blank]').click();
+   await expect(page.locator('[data-p2-smart]')).toBeVisible();
+   await page.reload({waitUntil:'domcontentloaded'});
+   await page.locator('.bottom-nav [data-nav="day"]').click();
+   await expect(page.locator('[data-p2-resume]')).toHaveCount(4);
+   await page.locator('[data-p2-resume="resistance"]').click();
+   await expect(page.locator('.ls-p2-set')).toHaveCount(1);
+   expect((await sessions(page)).filter(s=>s.type==='resistance')).toHaveLength(0);
  });
  test('quick resistance: 3 sets saved exactly once to shared history',async({page})=>{
   await fresh(page);await choose(page,'resistance','quick');await addBench(page,'60','8','3');await finish(page);
