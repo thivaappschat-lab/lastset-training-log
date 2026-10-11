@@ -286,3 +286,18 @@ test.describe('Mobile Scan Fix Save additions',()=>{
     expect(session.exercises[2].sets.map(s=>[s.weight,s.reps])).toEqual([[0,6]]);
   });
 });
+
+test('mobile review stays compact until a confirmed exercise is expanded',async({page})=>{
+  await start(page);
+  await parse(page,'Deadlift 140x5 then 150x3 then 160x1. Bench press 80x8 then 85x6');
+  await expect(page.locator('.ls-mobile-status')).toContainText('2 exercises');
+  await expect(page.locator('.ls-mobile-exercise')).toHaveCount(2);
+  await expect(page.locator('[data-p1-weight]')).toHaveCount(0);
+  await page.locator('[data-mobile-open="0"]').click();
+  await expect(page.locator('[data-p1-weight="0:0"]')).toHaveValue('140');
+  await expect(page.locator('[data-p1-weight="0:2"]')).toHaveValue('160');
+  await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeVisible();
+  await page.locator('[data-mobile-open="1"]').click();
+  await expect(page.locator('[data-p1-weight="0:0"]')).toHaveCount(0);
+  await expect(page.locator('[data-p1-weight="1:0"]')).toHaveValue('80');
+});
