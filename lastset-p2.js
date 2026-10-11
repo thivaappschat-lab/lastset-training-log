@@ -207,7 +207,7 @@ function decorateToday(){
   section.innerHTML='<div class="ls-p2-section-title"><strong>Log your training</strong><small>Choose a category · timers optional</small></div>'+
    '<div class="ls-p2-grid">'+Object.entries(catNames).map(([id,label])=>'<button data-p2-entry="'+id+'"><span class="ls-p2-grid-icon">'+({resistance:'🏋️',cardio:'🏃',mobility:'🧘',smart:'🎙️'}[id])+'</span><strong>'+esc(label)+'</strong><small>'+({resistance:'Weights, reps and sets',cardio:'Running, cycling and more',mobility:'Yoga, stretching and recovery',smart:'Type or speak your workout'}[id])+'</small></button>').join('')+'</div>'+
    allDrafts().map(d=>'<div class="ls-p2-resume"><strong>Unfinished '+esc(catNames[d.category])+' workout</strong><button data-p2-resume="'+d.category+'">Resume draft →</button></div>').join('')+
-   '<details class="ls-p2-reuse"><summary>Previous workouts and saved routines</summary><div data-p2-reuse-body></div></details><button class="ls-p2-rest" type="button" data-p2-rest>🛏️ Mark a rest day</button>';
+   '<details class="ls-p2-reuse"><summary>Previous workouts and saved routines</summary><div data-p2-reuse-body></div></details><button class="ls-p2-rest" type="button" data-p2-mark-rest>🛏️ Mark a rest day</button>';
   const motivation=main.querySelector('.ls-hero');
   // Keep the user's original motivational portrait first, then the P2
   // entry tiles, before any saved-workout or legacy logging shortcuts.
@@ -364,12 +364,12 @@ document.addEventListener('click',e=>{
        selectedResistanceExercise=ex.id;resistanceBrowsing=false;go('p2-mode');return;
      }
    }
-  const el=e.target.closest?.('[data-p2-entry],[data-p2-resume],[data-p2-rest],[data-p2-mode],[data-p2-back],[data-p2-blank],[data-p2-source-tab],[data-p2-source],[data-p2-change-mode],[data-p2-toggle-ex],[data-p2-remove-ex],[data-p2-add-set],[data-p2-remove-set],[data-p2-exercise],[data-p2-add-activity],[data-p2-remove-entry],[data-p2-parse],[data-p2-accept-smart],[data-p2-finish],[data-p2-return],[data-p2-commit],[data-p2-discard],[data-p2-skip-rest],[data-p2-pause],[data-p2-retry],[data-p2-export],[data-p2-save-preset]');
+  const el=e.target.closest?.('[data-p2-entry],[data-p2-resume],[data-p2-mark-rest],[data-p2-mode],[data-p2-back],[data-p2-blank],[data-p2-source-tab],[data-p2-source],[data-p2-change-mode],[data-p2-toggle-ex],[data-p2-remove-ex],[data-p2-add-set],[data-p2-remove-set],[data-p2-exercise],[data-p2-add-activity],[data-p2-remove-entry],[data-p2-parse],[data-p2-accept-smart],[data-p2-finish],[data-p2-return],[data-p2-commit],[data-p2-discard],[data-p2-skip-rest],[data-p2-pause],[data-p2-retry],[data-p2-export],[data-p2-save-preset]');
   if(!el)return;e.preventDefault();e.stopImmediatePropagation();
   const d=active(),i=Number(el.dataset.p2ToggleEx||el.dataset.p2RemoveEx||el.dataset.p2AddSet||0);
   if(el.dataset.p2Entry)open(el.dataset.p2Entry);
   else if(el.hasAttribute('data-p2-resume')){if(draft&&!persist())return;category=el.dataset.p2Resume;draft=null;go('p2-workout');}
-   else if(el.hasAttribute('data-p2-rest')){if(typeof dayAction==='function')dayAction('rest');}
+   else if(el.hasAttribute('data-p2-mark-rest')){if(typeof dayAction==='function')dayAction('rest');}
   else if(el.dataset.p2Mode)chooseMode(el.dataset.p2Mode);
   else if(el.hasAttribute('data-p2-back')){if(state.view==='p2-mode'&&category==='resistance'&&selectedResistanceExercise){resistanceBrowsing=true;go('exercise-list');}else go(state.view==='p2-mode'?'day':state.view==='p2-sources'?'p2-mode':state.view==='p2-finish'?'p2-workout':'day');}
   else if(el.hasAttribute('data-p2-blank'))begin(null);
