@@ -516,7 +516,9 @@ function safeStorageSet(value){
     const encoded=JSON.stringify(value);
     window.localStorage.setItem(STORAGE_KEY,encoded);
     if(window.localStorage.getItem(STORAGE_KEY)!==encoded) throw new Error('Device save verification failed');
-    if(typeof document!=='undefined') document.getElementById('ls-save-failure')?.remove();
+    // Do not dismiss the emergency warning here: this is only the active
+    // workout write. The profile registry is a second required write.
+    // The success of this step alone cannot prove full persistence.
     return true;
   } catch(e) {
     reportStorageFailure(e);
