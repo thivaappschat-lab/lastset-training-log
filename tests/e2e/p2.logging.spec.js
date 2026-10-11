@@ -51,6 +51,7 @@ async function seed(page){
   localStorage.setItem(key,JSON.stringify(d));
  },STORE);
  await page.reload({waitUntil:'domcontentloaded'});
+ await page.locator('.bottom-nav [data-nav="day"]').click();
  await expect(page.locator('[data-p2-entry="resistance"]')).toBeVisible();
 }
 
@@ -78,6 +79,7 @@ test.describe('P2 four-category logging modes and safe source reuse',()=>{
   await expect(page.locator('[data-p2-elapsed]')).toHaveCount(0);
   expect((await sessions(page)).filter(x=>x.type==='resistance')).toHaveLength(0);
   await page.reload({waitUntil:'domcontentloaded'});
+  await page.locator('.bottom-nav [data-nav="day"]').click();
   await page.locator('[data-p2-resume]').click();
   await expect(page.locator('.ls-p2-set')).toHaveCount(1);
   await finish(page);
