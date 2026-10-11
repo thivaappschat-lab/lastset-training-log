@@ -3,19 +3,23 @@
 (()=>{
 'use strict';
 if(typeof state==='undefined'||typeof data==='undefined'||typeof saveData!=='function')return;
-const V='0.20.0', PREFIX='lastset-p2-active-v1:', clone=x=>JSON.parse(JSON.stringify(x));
+const V='0.20.1', PREFIX='lastset-p2-active-v1:', clone=x=>JSON.parse(JSON.stringify(x));
 const esc=v=>typeof escapeHtml==='function'?escapeHtml(String(v??'')):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const catNames={resistance:'Resistance',cardio:'Cardio',mobility:'Mobility & Recovery',smart:'Smart Log'};
 const modes={quick:['Log & Finish','Enter completed training and save'],free:['Log As I Go','Log without a timer'],timed:['Log With Timer','Optional rest countdown or stopwatch']};
 const cardioNames=['Running','Treadmill','Walking','Cycling','Stationary Bike','Rowing','Swimming','Elliptical','Stair Climb','Stair Machine'];
 const mobilityNames=['Yoga','Pilates','Stretching','Mobility Drills','Foam Rolling'];
-let category='resistance',mode='quick',draft=null,sourceTab='previous',message='',failure=false,exerciseSearch='',returnFromSmart=false;
-function key(){return PREFIX+String(data?.profile?.userId||'unregistered').replace(/[^a-z0-9_-]/ig,'_').slice(0,80);}
+let category='resistance',mode='quick',draft=null,sourceTab='previous',message='',failure=false,exerciseSearch='',selectedResistanceExercise='',resistanceBrowsing=false;
+function identity(){return String(data?.profile?.userId||'unregistered');}
+function oldKey(){return PREFIX+identity().replace(/[^a-z0-9_-]/ig,'_').slice(0,80);}
+function key(cat=category){return oldKey()+':'+cat;}
 function cleanDate(){return /^\d{4}-\d\d-\d\d$/.test(state.selectedDate)?state.selectedDate:isoDate(new Date());}
-function loadDraft(){try{const d=JSON.parse(localStorage.getItem(key())||'null');return d&&d.version===1&&d.userId===String(data?.profile?.userId||'unregistered')&&d.status==='active'?d:null;}catch(_){return null;}}
-function active(){const id=String(data?.profile?.userId||'unregistered');if(draft&&draft.userId!==id)draft=null;return draft||(draft=loadDraft());}
-function persist(){if(!draft)return false;try{const value=JSON.stringify(draft);localStorage.setItem(key(),value);if(localStorage.getItem(key())!==value)throw Error('Draft verification failed');failure=false;return true;}catch(e){failure=true;message='Draft was not saved to device. Keep LastSet open, retry storage, or export a backup before leaving.';return false;}}
-function clear(){try{localStorage.removeItem(key());}catch(_){}draft=null;failure=false;}
+function valid(d,c){return d&&d.version===1&&d.userId===identity()&&d.category===c&&d.status==='active';}
+function loadDraft(c=category){try{const d=JSON.parse(localStorage.getItem(key(c))||'null');if(valid(d,c))return d;const previous=JSON.parse(localStorage.getItem(oldKey())||'null');return valid(previous,c)?previous:null;}catch(_){return null;}}
+function allDrafts(){return Object.keys(catNames).map(c=>loadDraft(c)).filter(Boolean);}
+function active(){if(draft&&(draft.userId!==identity()||draft.category!==category))draft=null;return draft||(draft=loadDraft());}
+function persist(){if(!draft||draft.category!==category)return false;try{const raw=JSON.stringify(draft),k=key(draft.category);localStorage.setItem(k,raw);if(localStorage.getItem(k)!==raw)throw Error('Draft verification failed');failure=false;return true;}catch(e){failure=true;message='Draft was not saved to device. Keep LastSet open, retry storage, or export a backup before leaving.';return false;}}
+function clear(){const cat=draft?.category||category;try{localStorage.removeItem(key(cat));const old=JSON.parse(localStorage.getItem(oldKey())||'null');if(valid(old,cat))localStorage.removeItem(oldKey());}catch(_){}draft=null;failure=false;}
 function begin(source){
   const userId=String(data?.profile?.userId||'unregistered');
   draft={version:1,id:cryptoId(),userId,date:cleanDate(),category,mode,status:'active',
@@ -53,6 +57,11 @@ function begin(source){
     if(category==='mobility')draft.mobility={...draft.mobility,...clone(source.preset.values)};
     if(category==='smart')draft.smartText=String(source.preset.values?.text||'');
   }
+  if(category==='resistance'&&selectedResistanceExercise&&!draft.exercises.some(x=>x.exerciseId===selectedResistanceExercise)){
+    const ex=EXERCISES.find(x=>x.id===selectedResistanceExercise);
+    if(ex){const last=typeof findLastExercise==='function'?findLastExercise(ex.id,draft.date):null;
+      draft.exercises.unshift({id:cryptoId(),exerciseId:ex.id,name:ex.name,loadType:ex.loadType||'external',sets:[],suggested:(last?.sets||[]).map(x=>({...x})),note:'',expanded:true});}
+  }
   if(category==='smart'&&mode==='quick'){
     let words='';
     if(source?.kind==='historical')words='Previous activities (REFERENCE ONLY): '+(source.sessions||[]).flatMap(s=>{
@@ -85,10 +94,10 @@ function savedRecords(){
   ];
 }
 function pageHeading(title,sub){
-  return '<main class="container ls-p2"><div class="ls-p2-page-head"><button class="ls-p2-back" data-p2-back type="button" aria-label="Back">‹</button><div><div class="ls-p2-kicker">LASTSET / P2 BETA</div><h2>'+esc(title)+'</h2><p>'+esc(sub||'')+'</p></div></div>';
+  return '<main class="container ls-p2"><div class="ls-p2-page-head"><button class="ls-p2-back" data-p2-back type="button" aria-label="Back">‹</button><div><div class="ls-p2-kicker">LASTSET TRAINING</div><h2>'+esc(title)+'</h2><p>'+esc(sub||'')+'</p></div></div>';
 }
 function modeScreen(){
-  return pageHeading(catNames[category],'How would you like to log?')+
+  return pageHeading(category==='resistance'&&selectedResistanceExercise?(EXERCISES.find(e=>e.id===selectedResistanceExercise)?.name||catNames[category]):catNames[category],category==='resistance'?'Choose how to log this exercise. Timers optional.':'How would you like to log?')+
     '<div class="ls-p2-modes">'+Object.entries(modes).map(([m,[label,description]])=>'<button class="ls-p2-mode" data-p2-mode="'+m+'"><span class="ls-p2-mode-icon">'+({quick:'✓',free:'🏋',timed:'◷'}[m])+'</span><span><strong>'+label+'</strong><small>'+description+'</small></span><b>›</b></button>').join('')+'</div>'+
     '<div class="ls-p2-note">Your existing quick log stays available. Timers are never required.</div></main>';
 }
@@ -197,21 +206,42 @@ function decorateToday(){
   const section=document.createElement('section');section.className='ls-p2-today';section.dataset.p2Today='1';
   section.innerHTML='<div class="ls-p2-section-title"><strong>Log your training</strong><small>Choose a category · timers optional</small></div>'+
    '<div class="ls-p2-grid">'+Object.entries(catNames).map(([id,label])=>'<button data-p2-entry="'+id+'"><span class="ls-p2-grid-icon">'+({resistance:'🏋️',cardio:'🏃',mobility:'🧘',smart:'🎙️'}[id])+'</span><strong>'+esc(label)+'</strong><small>'+({resistance:'Weights, reps and sets',cardio:'Running, cycling and more',mobility:'Yoga, stretching and recovery',smart:'Type or speak your workout'}[id])+'</small></button>').join('')+'</div>'+
-   (active()?'<div class="ls-p2-resume"><strong>Unfinished '+esc(catNames[active().category])+' workout</strong><button data-p2-resume>Resume draft →</button></div>':'')+
-   '<div class="ls-p2-classic"><strong>Original quick-log shortcuts</strong><p>Keep using the proven P1 logging paths below, or choose the new P2 cards above.</p></div>';
+   allDrafts().map(d=>'<div class="ls-p2-resume"><strong>Unfinished '+esc(catNames[d.category])+' workout</strong><button data-p2-resume="'+d.category+'">Resume draft →</button></div>').join('')+
+   '<details class="ls-p2-reuse"><summary>Previous workouts and saved routines</summary><div data-p2-reuse-body></div></details><button class="ls-p2-rest" type="button" data-p2-rest>🛏️ Mark a rest day</button>';
   const motivation=main.querySelector('.ls-hero');
   // Keep the user's original motivational portrait first, then the P2
   // entry tiles, before any saved-workout or legacy logging shortcuts.
   if(motivation)motivation.insertAdjacentElement('afterend',section);
   else main.insertBefore(section,list);
+  const holder=section.querySelector('[data-p2-reuse-body]');
+  for(const card of [...main.querySelectorAll('.quick-workout,[data-saved-workouts-entry="day"]')])holder.appendChild(card);
+  if(!holder.children.length)section.querySelector('.ls-p2-reuse').remove();
+  list.style.display='none';
+  const heading=list.previousElementSibling;
+  if(heading?.classList.contains('section-title')&&/quick log/i.test(heading.textContent||''))heading.style.display='none';
 }
 function go(v){message='';state.view=v;render();}
 function open(id){
-  const old=active();
-  if(old){go('p2-workout');return;}
-  category=id;mode='quick';sourceTab='previous';exerciseSearch='';go('p2-mode');
+  if(!Object.hasOwn(catNames,id))return;
+  if(draft&&!persist())return;
+  category=id;draft=null;mode='quick';sourceTab='previous';exerciseSearch='';selectedResistanceExercise='';resistanceBrowsing=false;
+  if(id==='resistance'){globalThis.LastSetNavigation?.pushCurrent?.();resistanceBrowsing=true;go('exercise-list');return;}
+  if(active()){go('p2-workout');return;}
+  go('p2-mode');
 }
-function chooseMode(id){mode=id;sourceTab='previous';go('p2-sources');}
+function chooseMode(id){
+  if(!Object.hasOwn(modes,id))return;mode=id;sourceTab='previous';
+  const old=active();
+  if(category==='resistance'&&old&&selectedResistanceExercise){
+    const ex=EXERCISES.find(x=>x.id===selectedResistanceExercise);
+    if(ex&&!old.exercises.some(x=>x.exerciseId===ex.id)){
+      const last=typeof findLastExercise==='function'?findLastExercise(ex.id,old.date):null;
+      old.exercises.push({id:cryptoId(),exerciseId:ex.id,name:ex.name,loadType:ex.loadType||'external',sets:[],suggested:(last?.sets||[]).map(x=>({...x})),note:'',expanded:true});
+    }
+    old.mode=id;old.restUntil=0;if(!persist())return;go('p2-workout');return;
+  }
+  go('p2-sources');
+}
 function update(target){
   const d=active();if(!d)return;
   const fieldName=target.dataset.p2Field;
@@ -325,13 +355,23 @@ screen=function(){return /^p2-(mode|sources|workout|finish)$/.test(state.view)?p
 const oldRender=render;
 render=function(){oldRender();decorateToday();document.documentElement.dataset.lastsetP2=V;};
 document.addEventListener('click',e=>{
-  const el=e.target.closest?.('[data-p2-entry],[data-p2-resume],[data-p2-mode],[data-p2-back],[data-p2-blank],[data-p2-source-tab],[data-p2-source],[data-p2-change-mode],[data-p2-toggle-ex],[data-p2-remove-ex],[data-p2-add-set],[data-p2-remove-set],[data-p2-exercise],[data-p2-add-activity],[data-p2-remove-entry],[data-p2-parse],[data-p2-accept-smart],[data-p2-finish],[data-p2-return],[data-p2-commit],[data-p2-discard],[data-p2-skip-rest],[data-p2-pause],[data-p2-retry],[data-p2-export],[data-p2-save-preset]');
+   if(resistanceBrowsing&&state.view==='exercise-list'){
+     const button=e.target.closest?.('[data-exercise]');
+     if(button){
+       const ex=EXERCISES.find(x=>x.id===button.dataset.exercise);
+       if(!ex)return;
+       e.preventDefault();e.stopImmediatePropagation();
+       selectedResistanceExercise=ex.id;resistanceBrowsing=false;go('p2-mode');return;
+     }
+   }
+  const el=e.target.closest?.('[data-p2-entry],[data-p2-resume],[data-p2-rest],[data-p2-mode],[data-p2-back],[data-p2-blank],[data-p2-source-tab],[data-p2-source],[data-p2-change-mode],[data-p2-toggle-ex],[data-p2-remove-ex],[data-p2-add-set],[data-p2-remove-set],[data-p2-exercise],[data-p2-add-activity],[data-p2-remove-entry],[data-p2-parse],[data-p2-accept-smart],[data-p2-finish],[data-p2-return],[data-p2-commit],[data-p2-discard],[data-p2-skip-rest],[data-p2-pause],[data-p2-retry],[data-p2-export],[data-p2-save-preset]');
   if(!el)return;e.preventDefault();e.stopImmediatePropagation();
   const d=active(),i=Number(el.dataset.p2ToggleEx||el.dataset.p2RemoveEx||el.dataset.p2AddSet||0);
   if(el.dataset.p2Entry)open(el.dataset.p2Entry);
-  else if(el.hasAttribute('data-p2-resume'))go('p2-workout');
+  else if(el.hasAttribute('data-p2-resume')){if(draft&&!persist())return;category=el.dataset.p2Resume;draft=null;go('p2-workout');}
+   else if(el.hasAttribute('data-p2-rest')){if(typeof dayAction==='function')dayAction('rest');}
   else if(el.dataset.p2Mode)chooseMode(el.dataset.p2Mode);
-  else if(el.hasAttribute('data-p2-back'))go(state.view==='p2-mode'?'day':state.view==='p2-sources'?'p2-mode':state.view==='p2-finish'?'p2-workout':'day');
+  else if(el.hasAttribute('data-p2-back')){if(state.view==='p2-mode'&&category==='resistance'&&selectedResistanceExercise){resistanceBrowsing=true;go('exercise-list');}else go(state.view==='p2-mode'?'day':state.view==='p2-sources'?'p2-mode':state.view==='p2-finish'?'p2-workout':'day');}
   else if(el.hasAttribute('data-p2-blank'))begin(null);
   else if(el.dataset.p2SourceTab){sourceTab=el.dataset.p2SourceTab;render();}
   else if(el.hasAttribute('data-p2-source')){const x=(sourceTab==='previous'?sourceRecords():savedRecords())[Number(el.dataset.p2Source)];if(x)begin(x);}
@@ -387,5 +427,5 @@ setInterval(()=>{
 },1000);
 window.addEventListener('pagehide',()=>{if(draft)persist();});
 render();
-globalThis.LastSetP2={version:V,loadDraft,sourceRecords,savedRecords,active};
+globalThis.LastSetP2={version:V,loadDraft,sourceRecords,savedRecords,active,allDrafts};
 })();
