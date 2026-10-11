@@ -91,4 +91,13 @@ const match=(phrase,name,id,loadType='external')=>{
   assert.deepStrictEqual(sets(values[1]),[[70,10],[60,null]]);
 }
 assert.equal(p.validateReview({items:[{kind:'resistance',exerciseId:'chin-up',sets:[{weightKg:0,reps:8}],p1RequiresRewrite:true}]}).ok,false,'Unsupported mixed assisted / bodyweight mode must block save');
+{
+  const expected=[{weightKg:80,reps:10},{weightKg:80,reps:10},{weightKg:80,reps:8}];
+  const memory={memoryAssumptions:[{sourceDate:'2026-10-01'}],items:[{kind:'resistance',exerciseId:'bench-press',sets:expected}]};
+  assert.equal(p.preserveExplicitMemoryResult(memory),true,'explicit memory commands must bypass source-set parsing');
+  assert.deepStrictEqual(memory.items[0].sets,expected,'the recalled set sequence is the source of truth');
+  assert.equal(p.preserveExplicitMemoryResult({memoryLearnedAliases:[{phrase:'my bench'}],items:[{}]}),true);
+  assert.equal(p.preserveExplicitMemoryResult({items:[{memorySuggestion:{sourceDate:'2026-10-01'}}]}),true);
+  assert.equal(p.preserveExplicitMemoryResult({items:[{kind:'resistance',exerciseId:'bench-press'}]}),false);
+}
 console.log('P1 source-boundary / invented-set regression passed: 10 compound fixtures and fail-closed review');
