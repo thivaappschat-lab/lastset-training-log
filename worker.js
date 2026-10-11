@@ -44,7 +44,6 @@ const SCRIPT_TAGS = [
   ["/lastset-explore.js","0290"],
   ["/lastset-mobility.js","0300"],
   ["/lastset-smartlog-p1.js","0150"],
-  ["/lastset-voice-repair.js","0162"],
   ["/lastset-smartlog-mobile.js","0160"]
 ];
 
