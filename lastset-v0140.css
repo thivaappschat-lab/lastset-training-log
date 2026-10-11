@@ -9,3 +9,15 @@
 .ls-v14-repeat-note{color:#82798d;font-size:8.5px;line-height:1.35;margin:7px 0}.ls-v14-voice{position:fixed;inset:0;z-index:1700;display:grid;place-items:center;padding:20px;background:rgba(5,4,9,.84);backdrop-filter:blur(16px)}.ls-v14-voice-card{width:min(100%,350px);text-align:center;border:1px solid rgba(166,88,237,.38);border-radius:22px;padding:23px;background:#110c19}.ls-v14-mic{width:55px;height:55px;display:grid;place-items:center;margin:0 auto 14px;border-radius:50%;background:rgba(157,77,230,.16);color:#b862ff;box-shadow:0 0 0 9px rgba(145,62,218,.05),0 0 30px rgba(145,62,218,.2);animation:lsVoicePulse 1s ease-in-out infinite alternate}.ls-v14-voice-card h3{margin:5px 0}.ls-v14-voice-card p{min-height:36px;color:#b7aebf;font-size:11px;line-height:1.45}.ls-v14-voice-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.ls-v14-voice-card button{margin:0!important}@keyframes lsVoicePulse{to{transform:scale(1.06);box-shadow:0 0 0 14px rgba(145,62,218,.03),0 0 38px rgba(145,62,218,.32)}}
 @media(max-width:390px){.ls-user-name{font-size:12.5px!important;max-width:82px!important}.ls-v14-progress-row{grid-template-columns:minmax(0,1fr) 90px 10px}.ls-v14-spark{width:90px}.ls-v14-map-row{grid-template-columns:1fr}.ls-v14-history-row{grid-template-columns:54px 1fr}}
 @media(prefers-reduced-motion:reduce){.ls-v14-mic{animation:none!important}}
+
+
+/* v0.16 voice: long speech, visible transcript and manual continuation. */
+.ls-v14-voice-card{max-height:calc(100dvh - 36px);overflow-y:auto;overscroll-behavior:contain}
+.ls-v14-voice-card [data-voice-text]{max-height:29dvh;overflow-y:auto;overflow-wrap:anywhere;white-space:pre-wrap;text-align:left;padding:10px;border-radius:12px;background:rgba(180,155,220,.07);border:1px solid rgba(180,155,220,.2)}
+.ls-v14-voice-card [data-voice-hint]{min-height:0;margin:8px 0 10px}
+.ls-v14-voice-actions [data-voice-continue]:not([hidden]){grid-column:1/-1;grid-row:1}
+.ls-v14-voice-actions button[hidden]{display:none!important}
+.ls-v14-voice-actions button{min-height:47px}
+html[data-lastset-theme="light"] .ls-v14-voice-card{background:#fff;color:#172136;border-color:#d9dfeb}
+html[data-lastset-theme="light"] .ls-v14-voice-card p{color:#4e5a70}
+html[data-lastset-theme="light"] .ls-v14-voice-card [data-voice-text]{background:#f2f5fc;border-color:#d9dfeb;color:#172136}
