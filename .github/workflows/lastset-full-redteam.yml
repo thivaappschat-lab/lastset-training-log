@@ -4,6 +4,9 @@ on:
     branches: [p2-redteam-20261012]
     paths:
       - '.github/workflows/lastset-full-redteam.yml'
+      - 'lastset-p2.js'
+      - 'lastset-workouts.js'
+      - 'lastset-navigation.js'
       - 'tests/e2e/p0.trust.spec.js'
       - 'tests/e2e/p1.exhaustive.spec.js'
       - 'tests/e2e/p1.smartlog.spec.js'
@@ -11,6 +14,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: lastset-full-redteam-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   source-integrity:
     runs-on: ubuntu-latest
