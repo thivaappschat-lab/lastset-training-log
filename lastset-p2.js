@@ -187,7 +187,7 @@ function finishScreen(){
    d.entries.map(e=>'<div class="ls-p2-source"><span><strong>'+esc(e.activity)+'</strong><small>'+esc(e.duration)+' min</small></span></div>').join('')+
    (d.mode==='timed'?'<p>Session clock: '+duration(elapsed())+' (not automatically substituted for activity duration).</p>':'')+'</section>'+
    (message?'<p class="ls-p2-message" role="alert">'+esc(message)+'</p>':'')+
-   '<button class="primary" data-p2-commit>✓ Confirm and save to History</button><button class="secondary" data-p2-return>Edit workout</button></main>';
+   '<button class="primary" data-p2-commit>✓ Confirm and save to History</button><button class="secondary" data-p2-export>Export draft backup</button><button class="secondary" data-p2-return>Edit workout</button></main>';
 }
 function p2Screen(){return state.view==='p2-mode'?modeScreen():state.view==='p2-sources'?sourceScreen():state.view==='p2-workout'?workoutScreen():finishScreen();}
 function decorateToday(){
@@ -357,6 +357,14 @@ document.addEventListener('click',e=>{
   else if(el.hasAttribute('data-p2-pause')&&d){if(d.pausedAt){d.pausedMs+=Date.now()-d.pausedAt;d.pausedAt=null;}else{d.pausedAt=Date.now();}persist();render();}
   else if(el.hasAttribute('data-p2-retry')){if(persist()){message='Draft storage recovered.';render();}}
   else if(el.hasAttribute('data-p2-export')){const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='lastset-p2-draft-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+},true);
+// The emergency storage banner belongs to the legacy shell. For a failed P2
+// commit, its Retry must replay the P2 operation ID, never write stale data.
+document.addEventListener('click',event=>{
+  if(state.view!=='p2-finish'||!active()||!event.target.closest?.('[data-storage-retry]'))return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  commit();
 },true);
 document.addEventListener('input',e=>{
  if(e.target.matches?.('[data-p2-field],[data-p2-set],[data-p2-smart],[data-p2-confirm-copy]'))update(e.target);
