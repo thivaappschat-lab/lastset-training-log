@@ -3,7 +3,7 @@
    or weaken the original P1 validation gate. */
 (() => {
 'use strict';
-const VERSION='0.16.0-mobile-review';
+const VERSION='0.16.5-direct-exercise-edit';
 if(typeof window==='undefined'||typeof state==='undefined'||typeof render!=='function')return;
 const KEY_PREFIX='lastset-smartlog-draft-v2:';
 const esc=v=>typeof escapeHtml==='function'?escapeHtml(String(v??'')):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
@@ -122,12 +122,50 @@ function rowsHtml(item,i){
   }).join('');
   return sets+'<button class="secondary ls-mobile-add" type="button" data-p1-add="'+i+'">+ Add missing set</button>';
 }
+function hintAlias(item){
+  const source=String(item.p1Source||'');
+  const obvious=/\bmy sister dips?\b/i.exec(source);
+  if(obvious)return obvious[0].toLowerCase();
+  const lead=/^\s*([a-z][a-z\s-]{2,40}?)\s+\d+(?:\.\d+)?\s*(?:kg|kgs?|kilos?|lb|lbs)\b/i.exec(source);
+  return lead?lead[1].trim().toLowerCase():'';
+}
+function quickHtml(item,i){
+  if(item.kind!=='resistance'||item.p1RequiresRewrite||item.loadType==='timed')return '';
+  const sets=item.sets||[];
+  const uniform=key=>{
+    const values=sets.map(s=>s[key]);
+    return values.length&&values[0]!=null&&values.every(v=>v===values[0])?String(values[0]):'';
+  };
+  const type=item.loadType||'external';
+  const proposedWeight=uniform('weightKg');
+  const alias=item.p1WasUnidentified&&item.exerciseId?hintAlias(item):'';
+  const previous=item.memorySuggestion?.sets||[];
+  const memory=previous.length?
+    '<div class="ls-mobile-previous"><strong>Previous workout · '+esc(item.memorySuggestion.sourceDate)+'</strong>'+
+    '<p>'+esc(previous.length+' sets · '+previous.map(s=>s.weightKg+' kg × '+(s.reps??'?')).join(' · '))+'</p>'+
+    '<button type="button" class="secondary" data-memory-use="'+i+'">Use previous sets instead</button>'+
+    '<small>Only use this when you actually completed those sets today.</small></div>':'';
+  const learning=alias?
+    '<label class="ls-mobile-remember"><input type="checkbox" data-mobile-remember="'+i+'" '+(item.p1RememberAlias?'checked':'')+
+    '> Remember this corrected exercise name for future voice logs (this profile only)</label>'+
+    (item.p1RememberAlias?'<label class="ls-mobile-alias-label">Words to remember<input type="text" maxlength="60" data-mobile-alias-phrase="'+i+'" value="'+esc(item.p1LearnPhrase||alias)+'"></label>':''):'';
+  return '<section class="ls-mobile-quick"><strong>Quick edit this exercise</strong>'+
+    '<p>Enter the sets you actually completed. These fields never copy your history automatically.</p>'+
+    '<div class="ls-mobile-quick-grid">'+
+    '<label>'+(type==='assisted'?'Assistance (kg)':type==='bodyweight'?'Extra weight (kg)':'Weight (kg)')+
+      '<input type="number" inputmode="decimal" step="any" min="0" data-mobile-quick-weight="'+i+'" value="'+esc(type==='bodyweight'?(proposedWeight||'0'):proposedWeight)+'" placeholder="kg"></label>'+
+    '<label>Sets<input type="number" inputmode="numeric" min="1" max="20" step="1" data-mobile-quick-sets="'+i+'" value="'+esc(sets.length||'')+'" placeholder="Sets"></label>'+
+    '<label>Reps / set<input type="number" inputmode="numeric" min="1" max="500" step="1" data-mobile-quick-reps="'+i+'" value="'+esc(uniform('reps'))+'" placeholder="Reps"></label>'+
+    '</div><p class="ls-mobile-quick-error" role="alert" aria-live="polite"></p>'+
+    '<button class="primary" type="button" data-mobile-apply="'+i+'">Apply to '+esc(item.name||'exercise')+'</button>'+
+    '<small>Applies to every set in this exercise. Edit individual sets below if they differ.</small>'+memory+learning+'</section>';
+}
 function detailsHtml(item,i){
   const exList=(typeof EXERCISES==='undefined'?[]:EXERCISES).filter(ex=>item.ambiguity==='squat'?/squat/i.test(ex.name):true).slice().sort((a,b)=>a.name.localeCompare(b.name));
   const chooser=!item.exerciseId?'<label class="ls-mobile-choose">Identify exercise<select data-p1-exercise="'+i+'" aria-label="Choose the correct exercise"><option value="">Choose exercise</option>'+exList.map(ex=>'<option value="'+esc(ex.id)+'">'+esc(ex.name)+'</option>').join('')+'</select></label>':'';
   const mixed=item.p1RequiresRewrite?'<div class="ls-mobile-warning"><strong>Two loading modes detected</strong><p>Assisted and bodyweight work cannot be combined as one exercise. Confirm the actual assistance and completed bodyweight reps. LastSet will never guess these numbers.</p><button type="button" class="primary" data-mobile-split="'+i+'">Split into two exercises</button><button type="button" class="secondary" data-p1-edit-input>Change original description instead</button></div>':'';
   const warnings=item.p1Warnings?.length?'<div class="ls-mobile-warning"><strong>Review original wording</strong><p>'+item.p1Warnings.map(esc).join(' · ')+'</p><label class="ls-mobile-ack"><input type="checkbox" data-p1-ack="'+i+'" '+(item.p1Acknowledged?'checked':'')+'> I reviewed these details</label></div>':'';
-  return '<div class="ls-mobile-details">'+mixed+chooser+rowsHtml(item,i)+warnings+'</div>';
+  return '<div class="ls-mobile-details">'+mixed+chooser+quickHtml(item,i)+rowsHtml(item,i)+warnings+'</div>';
 }
 function renderMobile(parsed){
   const items=parsed.items||[],trouble=issues(parsed);
@@ -204,9 +242,12 @@ saveSmartLogWorkout=function(){
   }
   saving=true;
   writeDraft();
+  const learning=(state.aiParsed?.items||[]).filter(item=>item.p1RememberAlias&&item.p1WasUnidentified)
+    .map(item=>({...item}));
   try{
     baseSave();
     if(state.aiParsed===null&&state.view==='day'){
+      saveLearnedAliases(learning);
       clearDraft();expandedIndex=-1;sheetIndex=-1;success=true;render();
     }
   }catch(err){
@@ -219,6 +260,58 @@ saveSmartLogWorkout=function(){
 const previousBind=bindEvents;
 bindEvents=function(){previousBind();};
 function closeSheet(){sheetIndex=-1;render();}
+
+function applyQuick(i){
+  const item=state.aiParsed?.items?.[i];
+  if(!item||item.kind!=='resistance'||item.p1RequiresRewrite)return;
+  const field=name=>document.querySelector('[data-mobile-quick-'+name+'="'+i+'"]');
+  const countInput=field('sets'),repInput=field('reps'),weightInput=field('weight');
+  const error=(countInput?.closest('.ls-mobile-quick')||document).querySelector('.ls-mobile-quick-error');
+  const fail=(message,el)=>{
+    if(error)error.textContent=message;
+    el?.focus();
+  };
+  const count=Number(countInput?.value),reps=Number(repInput?.value),kg=Number(weightInput?.value);
+  if(!countInput?.value||!Number.isInteger(count)||count<1||count>20)return fail('Enter the actual number of sets (1–20).',countInput);
+  if(!repInput?.value||!Number.isInteger(reps)||reps<1||reps>500)return fail('Enter completed reps per set (1–500).',repInput);
+  if(item.loadType!=='bodyweight'&&weightInput?.value==='')return fail('Enter the actual weight or assistance in kg.',weightInput);
+  if(!Number.isFinite(kg)||kg<0||kg>2200)return fail('Enter a valid non-negative load.',weightInput);
+  // Explicit Apply is the commit point. Do not update workout sets while
+  // the user types; a Safari interruption cannot silently save half an edit.
+  const previous=item.sets||[];
+  item.sets=Array.from({length:count},(_,j)=>({
+    ...previous[j],
+    weightKg:item.loadType==='bodyweight'?kg:kg,
+    reps,
+    setType:previous[j]?.setType||'working'
+  }));
+  if(item.p1Warnings?.length)item.p1Acknowledged=false;
+  writeDraft();
+  render();
+}
+function saveLearnedAliases(exercises){
+  if(!exercises.length)return;
+  if(!data||typeof saveData!=='function')return;
+  const aliases=data.memory?.aliases||{};
+  let updated=0;
+  for(const item of exercises){
+    if(!item.p1RememberAlias||!item.p1WasUnidentified||!item.exerciseId)continue;
+    const phrase=String(item.p1LearnPhrase||hintAlias(item))
+      .toLowerCase().replace(/[“”"'’]/g,'').replace(/[^a-z0-9%+./ -]+/g,' ').replace(/\s+/g,' ').trim();
+    if(phrase.length<3||phrase.length>55||phrase.split(' ').length>6||/\d/.test(phrase))continue;
+    const ex=EXERCISES.find(x=>x.id===item.exerciseId);
+    if(!ex)continue;
+    aliases[phrase]={exerciseId:ex.id,name:ex.name,updatedAt:Date.now()};
+    updated++;
+  }
+  if(!updated)return;
+  data.memory=data.memory||{};
+  data.memory.version=1;
+  data.memory.aliases=aliases;
+  try{saveData(data);}
+  catch(err){console.warn('Workout saved but alias memory could not be persisted',err);showToast('Workout saved; phrase learning could not be stored.');}
+}
+
 function doSplit(i){
   const item=state.aiParsed?.items?.[i];if(!item?.p1RequiresRewrite)return;
   const panel=document.querySelector('.ls-mobile-sheet');
@@ -248,11 +341,12 @@ function confirmSplit(i){
   writeDraft();render();
 }
 document.addEventListener('click',event=>{
-  const el=event.target.closest?.('[data-mobile-open],[data-mobile-fix-next],[data-mobile-sheet-close],[data-mobile-sheet-wrap],[data-mobile-split],[data-mobile-split-confirm],[data-mobile-resume],[data-mobile-dismiss],[data-mobile-view],[data-mobile-today]');
+  const el=event.target.closest?.('[data-mobile-apply],[data-mobile-open],[data-mobile-fix-next],[data-mobile-sheet-close],[data-mobile-sheet-wrap],[data-mobile-split],[data-mobile-split-confirm],[data-mobile-resume],[data-mobile-dismiss],[data-mobile-view],[data-mobile-today]');
   if(!el)return;
   if(el.matches('[data-mobile-sheet-wrap]')&&event.target!==el)return;
   event.preventDefault();event.stopImmediatePropagation();
-  if(el.hasAttribute('data-mobile-open')){
+  if(el.hasAttribute('data-mobile-apply'))applyQuick(Number(el.getAttribute('data-mobile-apply')));
+  else if(el.hasAttribute('data-mobile-open')){
     const idx=Number(el.getAttribute('data-mobile-open'));
     if(issue(state.aiParsed?.items?.[idx]||{})){sheetIndex=idx;expandedIndex=-1;}
     else{expandedIndex=expandedIndex===idx?-1:idx;sheetIndex=-1;}
@@ -278,6 +372,17 @@ document.addEventListener('input',event=>{
   if(event.target?.matches?.('#ai-text,[data-p1-weight],[data-p1-reps],[data-p1-seconds],[data-mobile-assist-count],[data-mobile-assist-reps],[data-mobile-assist-weight],[data-mobile-body-reps]'))writeDraft();
 },true);
 document.addEventListener('change',event=>{
+  const target=event.target;
+  if(target?.hasAttribute?.('data-mobile-remember')){
+    const item=state.aiParsed?.items?.[Number(target.getAttribute('data-mobile-remember'))];
+    if(item){item.p1RememberAlias=target.checked;if(!target.checked)delete item.p1LearnPhrase;writeDraft();render();}
+    return;
+  }
+  if(target?.hasAttribute?.('data-mobile-alias-phrase')){
+    const item=state.aiParsed?.items?.[Number(target.getAttribute('data-mobile-alias-phrase'))];
+    if(item){item.p1LearnPhrase=target.value;writeDraft();}
+    return;
+  }
   if(event.target?.id==='lastset-theme-mode'){
     // Preview immediately. Persistent preference is saved with the Profile.
     const val=event.target.value;
