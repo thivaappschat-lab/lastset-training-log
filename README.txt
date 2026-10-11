@@ -1,3 +1,19 @@
+LASTSET — PROPRIETARY SOFTWARE
+Copyright (c) 2026 Thivagar Rajasekaran. All rights reserved.
+
+LastSet is independently owned proprietary software, NOT an open-source
+project. No general permission is granted to copy, redistribute, adapt, or
+commercially incorporate original LastSet materials into other products.
+Public GitHub access remains subject to GitHub's Terms of Service and
+applicable law. Third-party components retain their own licenses.
+
+Ownership: COPYRIGHT.md
+Use permissions: LICENSE
+External contributions: CONTRIBUTING.md
+Third-party and artwork provenance: THIRD_PARTY_NOTICES.md
+
+--------------------------------------------------------------------------
+
 LASTSET PWA v0.14.1.1 — WEBKIT OFFLINE SHELL HOTFIX
 
 This hotfix strengthens offline startup specifically for iPhone/WebKit after production QA found that WebKit could activate the service worker but fail to resolve the normal cached index.html key during an offline reload.
