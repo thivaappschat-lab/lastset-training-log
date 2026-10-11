@@ -7,7 +7,7 @@ const V='0.20.0', PREFIX='lastset-p2-active-v1:', clone=x=>JSON.parse(JSON.strin
 const esc=v=>typeof escapeHtml==='function'?escapeHtml(String(v??'')):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const catNames={resistance:'Resistance',cardio:'Cardio',mobility:'Mobility & Recovery',smart:'Smart Log'};
 const modes={quick:['Log & Finish','Enter completed training and save'],free:['Log As I Go','Log without a timer'],timed:['Log With Timer','Optional rest countdown or stopwatch']};
-const cardioNames=['Running','Walking','Cycling','Rowing','Swimming','Elliptical','Stair Climb','Stair Machine'];
+const cardioNames=['Running','Treadmill','Walking','Cycling','Stationary Bike','Rowing','Swimming','Elliptical','Stair Climb','Stair Machine'];
 const mobilityNames=['Yoga','Pilates','Stretching','Mobility Drills','Foam Rolling'];
 let category='resistance',mode='quick',draft=null,sourceTab='previous',message='',failure=false,exerciseSearch='',returnFromSmart=false;
 function key(){return PREFIX+String(data?.profile?.userId||'unregistered').replace(/[^a-z0-9_-]/ig,'_').slice(0,80);}
