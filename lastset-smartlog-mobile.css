@@ -127,3 +127,48 @@ html[data-lastset-theme="light"] .ls-mobile-success section{background:#fff !imp
 html[data-lastset-theme="light"] .ls-mobile-set{background:#f4f6fb !important}
 html[data-lastset-theme="light"] .ls-hero:before{opacity:.14}
 html[data-lastset-theme="light"] .ls-hero:after{opacity:.08}
+
+/* Light mode coverage for legacy LastSet components beyond Smart Log. */
+html[data-lastset-theme="light"]{
+  --ls-bg:#f5f6fb;--ls-panel:#fff;--ls-panel2:#edf1f9;--ls-panel3:#e9edff;
+  --ls-line:#d9dfeb;--ls-purple:#5547b7;--ls-purple2:#4c3ba9;
+  --ls-green:#176f4c;--ls-green2:#0d7750;--ls-text:#172136;
+  --ls-muted:#5c667d;--ls-warm:#96530b;
+}
+html[data-lastset-theme="light"] .ls-brand-last{color:#15213b !important}
+html[data-lastset-theme="light"] .ls-brand-tagline{color:#626d80 !important}
+html[data-lastset-theme="light"] .ls-brand-beta{color:#5c4381 !important;-webkit-text-fill-color:#5c4381 !important;background:#efe8fa !important}
+html[data-lastset-theme="light"] .ls-user-name{color:#15213b !important}
+html[data-lastset-theme="light"] .ls-motto{color:#15213b !important}
+html[data-lastset-theme="light"] .ls-date,html[data-lastset-theme="light"] .ls-explore-kicker,html[data-lastset-theme="light"] .ls-explore-bulb,html[data-lastset-theme="light"] .ls-learn-row span{color:#365abd !important}
+html[data-lastset-theme="light"] .ls-onboard-screen{background:linear-gradient(180deg,#f8faff,#eef2f9) !important;color:var(--ink) !important}
+html[data-lastset-theme="light"] .ls-onboard-card,html[data-lastset-theme="light"] .ls-onboard-finish-card,html[data-lastset-theme="light"] .ls-users-panel{
+  background:#fff !important;color:var(--ink) !important;border-color:var(--line) !important;box-shadow:0 14px 38px rgba(30,50,90,.12) !important;
+}
+html[data-lastset-theme="light"] .ls-onboard-brand strong{color:#14223c !important}
+html[data-lastset-theme="light"] .ls-onboard-photo-row,html[data-lastset-theme="light"] .ls-new-profile-photo,html[data-lastset-theme="light"] .ls-onboard-existing .ls-onboard-user-row{
+  background:#f4f6fc !important;color:var(--ink) !important;border-color:var(--line) !important;
+}
+html[data-lastset-theme="light"] .ls-onboard-kicker,html[data-lastset-theme="light"] .ls-onboard-fields .field label b{color:#365abd !important}
+html[data-lastset-theme="light"] .ls-onboard-card>p,html[data-lastset-theme="light"] .ls-onboard-photo-row small,html[data-lastset-theme="light"] .ls-onboard-privacy,html[data-lastset-theme="light"] .ls-onboard-finish-card p{color:var(--muted) !important}
+html[data-lastset-theme="light"] .ls-onboard-existing-link{color:#3d58c5 !important}
+html[data-lastset-theme="light"] .ls-onboard-finish{background:rgba(28,38,58,.55) !important}
+html[data-lastset-theme="light"] .ls-side-toggle,html[data-lastset-theme="light"] .ls-explore-chip,html[data-lastset-theme="light"] .ls-explore-exercise,html[data-lastset-theme="light"] .ls-v14-guide,html[data-lastset-theme="light"] .ls-plan-date input{
+  background:#f3f5fa !important;color:var(--ink) !important;border-color:var(--line) !important;
+}
+html[data-lastset-theme="light"] .ls-explore-chip.active,html[data-lastset-theme="light"] .ls-side-toggle button.active{
+  background:#e4eaff !important;color:#28469c !important;border-color:#6983cf !important;
+}
+html[data-lastset-theme="light"] .ls-side-toggle button{color:#536176 !important}
+html[data-lastset-theme="light"] .ls-explore-exercise-main{color:var(--ink) !important}
+html[data-lastset-theme="light"] .ls-explore-exercise-main span,html[data-lastset-theme="light"] .ls-explore-hero p,html[data-lastset-theme="light"] .ls-learn-row p{color:var(--muted) !important}
+html[data-lastset-theme="light"] .ls-anatomy-hint,html[data-lastset-theme="light"] .ls-anatomy-head span{color:var(--muted) !important}
+html[data-lastset-theme="light"] .ls-anatomy-hint strong{color:#3050a4 !important}
+html[data-lastset-theme="light"] .ls-zoom-controls{background:rgba(255,255,255,.95) !important;border-color:var(--line) !important}
+html[data-lastset-theme="light"] .ls-zoom-controls button{background:#edf1fa !important;color:#243b72 !important;border-color:var(--line) !important}
+html[data-lastset-theme="light"] .ls-v14-history-row,html[data-lastset-theme="light"] .ls-v14-progress-row,html[data-lastset-theme="light"] .ls-user-row{
+  color:var(--ink) !important;border-color:var(--line) !important;
+}
+html[data-lastset-theme="light"] .ls-users-panel .ls-user-row,html[data-lastset-theme="light"] .ls-users-panel .ls-choice-card{background:#f4f6fb !important;color:var(--ink) !important;border-color:var(--line) !important}
+html[data-lastset-theme="light"] .ls-integrity-label{color:#51617a !important}
+html[data-lastset-theme="light"] .ls-integrity-input{color:var(--ink) !important;background:#fff !important;border-color:var(--line) !important}
