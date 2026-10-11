@@ -107,6 +107,50 @@ test.describe('P1 progressive Smart Log end-to-end',()=>{
     await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
     expect(resistance(await records(page))).toBeUndefined();
   });
+  test('Grok R3B: Deadlift cannot inherit assisted Chin-Up set count as kilograms',async({page})=>{
+    await start(page);
+    await parse(page,'Deadlift 140x5 then 150x3 then 160x1. Chin ups assisted 3x8 then bodyweight max.');
+    await expect(page.locator('.ls-p1-card')).toHaveCount(2);
+    await expect(page.locator('.ls-p1-set')).toHaveCount(3);
+    for(const [i,w,r] of [[0,'140','5'],[1,'150','3'],[2,'160','1']]){
+      await expect(page.locator('[data-p1-weight="0:'+i+'"]')).toHaveValue(w);
+      await expect(page.locator('[data-p1-reps="0:'+i+'"]')).toHaveValue(r);
+    }
+    await expect(page.locator('.ls-p1-card').nth(1)).toContainText('Chin ups assisted 3x8 then bodyweight max');
+    await expect(page.locator('[data-p1-exercise="1"]')).toBeVisible();
+    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
+    expect(resistance(await records(page))).toBeUndefined();
+  });
+  test('Grok R3B: bare squat and Good Mornings are exactly two cards',async({page})=>{
+    await start(page);
+    await parse(page,'Squat 120x3, 130x2, 140x1. Good mornings 60 3x10.');
+    await expect(page.locator('.ls-p1-card')).toHaveCount(2);
+    await expect(page.locator('.ls-p1-set')).toHaveCount(6);
+    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
+    await expect(page.locator('.ls-p1-review')).toContainText('2 resistance exercises detected');
+  });
+  test('Grok R3B: warm up squat remains one exercise with five correct sets',async({page})=>{
+    await start(page);
+    await parse(page,'Warm up squat 60x8 80x5 then working 100x5 110x3 120x1');
+    await expect(page.locator('.ls-p1-card')).toHaveCount(1);
+    await expect(page.locator('.ls-p1-set')).toHaveCount(5);
+    await expect(page.locator('[data-p1-type="0:0"]')).toHaveValue('warmup');
+    await expect(page.locator('[data-p1-type="0:1"]')).toHaveValue('warmup');
+    await expect(page.locator('[data-p1-type="0:2"]')).toHaveValue('working');
+    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
+  });
+  test('Grok R3B: messy spoken Bench / Incline / Cable Fly cannot disappear',async({page})=>{
+    await start(page);
+    await parse(page,'did some bench today 80 kilos for eight then put 85 on and got six and five, then incline dumbbells 30 for ten three times and cable flies light for fifteen');
+    await expect(page.locator('.ls-p1-card')).toHaveCount(3);
+    await expect(page.locator('.ls-p1-review')).toContainText('3 resistance exercises detected');
+    await expect(page.locator('[data-p1-weight="0:0"]')).toHaveValue('80');
+    await expect(page.locator('[data-p1-weight="0:1"]')).toHaveValue('85');
+    await expect(page.locator('[data-p1-weight="0:2"]')).toHaveValue('85');
+    await expect(page.locator('[data-p1-exercise="1"]')).toBeVisible();
+    await expect(page.locator('[data-p1-exercise="2"]')).toBeVisible();
+    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
+  });
   test('squat and deadlift each retain every progressive load and rep',async({page})=>{
     await start(page);
     await parse(page,'Back squat 100x5, 110x3, 120x1. Deadlift 140x5 then 150x3 then 160x1');

@@ -72,6 +72,8 @@ jobs:
         run: node tests/core-reliability-smoke.js
       - name: P1 living gym-language regression
         run: node tests/p1-gym-language-smoke.js
+      - name: P1 source-boundary and invented-set regression
+        run: node tests/p1-source-boundary-smoke.js
       - name: Memory smoke tests
         run: node tests/memory-smoke.js
       - name: Intelligence smoke tests

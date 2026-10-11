@@ -37,6 +37,9 @@ function parseProgressivePhrase(text,loadType='external',defaultUnit='kg'){
     .replace(/\ba\s+(\d+)\b/g,'$1')
     .replace(/\s+/g,' ');
   const warnings=reviewWarnings(raw);
+  if(/\bassist(?:ed|ance)?\b/i.test(raw) && /\b(?:bodyweight|body\s*weight|\bmax\b)\b/i.test(raw)){
+    return {sets:[],warnings:unique([...warnings,'Assisted and bodyweight/failure sets need separate explicit loads and reps. Do not interpret the set count as kilograms.']),recognized:false};
+  }
   const weightUnit='(?:kg|kgs?|kilos?|lb|lbs|pounds?)';
   const counted=new RegExp('(?:^|\\s)\\+?(\\d+(?:\\.\\d+)?)\\s*('+weightUnit+'|s)?\\s+(\\d{1,2})\\s*(?:[x×]|sets?\\s*(?:of)?)\\s*(\\d{1,3})(?!\\d)','i');
   // 30s / 20s mean per dumbbell, not seconds, only with a 3x10-like scheme.
@@ -97,45 +100,74 @@ function parseProgressivePhrase(text,loadType='external',defaultUnit='kg'){
 }
 // Independent source inventory: recognised and ambiguous exercises must all
 // appear in the review, even when older parser layers omit them.
-function findUnaccountedExerciseSegments(source,mentions,defaultUnit='kg'){
-  const text=safe(source),ordered=(mentions||[]).slice().sort((a,b)=>a.start-b.start);
-  const unaccounted=[];
-  const intersects=(start,end)=>ordered.some(m=>m.start<end&&m.end>start);
-  const endsAt=pos=>{
-    const next=ordered.find(m=>m.start>pos)?.start??text.length;
-    const punctuation=text.slice(pos,next).search(/[.;\n](?=\s*[A-Za-z])/);
-    return punctuation>=0?Math.min(next,pos+punctuation):next;
+// Keep the source text as the source of truth. An unrecognised exercise can
+// still be a hard boundary: its numbers must NEVER be parsed into the prior
+// recognised lift. This intentionally prefers review over guessed records.
+function buildSmartLogSourceInventory(source,mentions,defaultUnit='kg'){
+  const text=safe(source);
+  const found=(mentions||[]).slice().sort((a,b)=>a.start-b.start);
+  const candidates=found.map(m=>({start:m.start,end:m.end,exercise:m.exercise||null,alias:m.alias||'',ambiguity:null,recognised:true}));
+  const overlaps=(start,end)=>candidates.some(m=>start<m.end&&end>m.start);
+  const addUnknown=(start,end,ambiguity,alias='')=>{
+    if(!overlaps(start,end))candidates.push({start,end,ambiguity,alias,exercise:null});
   };
-  for(const hit of text.matchAll(/\bsquats?\b/gi)){
-    const start=hit.index,end=start+hit[0].length;
-    if(intersects(start,end))continue; // Explicit goblet/front/etc. already recognised.
-    const before=text.slice(Math.max(0,start-24),start);
-    if(/\b(?:barbell|back|front|bodyweight|body\s*weight|air|hack|goblet|smith)\s*$/i.test(before))continue;
-    const segment=text.slice(start,endsAt(end)).trim();
-    const parsed=parseProgressivePhrase(segment,'external',defaultUnit);
-    unaccounted.push({
-      start,source:segment,ambiguity:'squat',
-      sets:parsed?.sets||[],
-      warnings:['Squat type was not specified. Choose the exercise before saving.']
-    });
+  // These are deliberately *not* inferred as a specific exercise: the user
+  // must choose the intended variation. They nevertheless act as boundaries.
+  const unknown=/(?:\bsquats?\b|\bchin[\s-]?ups?\b|\bface[\s-]?pulls?\b|\bgood[\s-]?mornings?\b|\bincline\s+dumbbells?\b|\bdb\s+incline\b|\bcable\s+flies\b)/gi;
+  for(const m of text.matchAll(unknown)){
+    const token=m[0].toLowerCase();
+    if(/^squats?$/.test(token)){
+      const before=text.slice(Math.max(0,m.index-24),m.index);
+      if(/\b(?:barbell|back|front|bodyweight|body\s*weight|air|hack|goblet|smith)\s*$/i.test(before))continue;
+    }
+    addUnknown(m.index,m.index+m[0].length,/^squats?$/.test(token)?'squat':'unidentified',m[0]);
   }
-  // Detect an entire unrecognised sentence with lifting numbers. Do not
-  // hallucinate an exercise name. Force an explicit user correction instead.
+  // A wholly unidentified clause still deserves a visible review card.
+  // Detect clause starts without treating a comma between *sets* as a new lift.
   const clauses=[...text.matchAll(/(?:^|[.;\n])\s*([^.;\n]+)/g)];
-  for(const match of clauses){
-    const content=match[1],start=match.index+match[0].indexOf(content),end=start+content.length;
-    if(intersects(start,end)||unaccounted.some(x=>x.start>=start&&x.start<end))continue;
-    if(!/\b(?:\d+(?:\.\d+)?\s*(?:kg|lb|x|×|for\b)|\d+\s+sets?\b)/i.test(content))continue;
+  for(const clause of clauses){
+    const content=clause[1],start=clause.index+clause[0].indexOf(content),end=start+content.length;
+    if(candidates.some(m=>m.start>=start&&m.start<end))continue;
     const firstNumber=content.search(/\d/),lead=firstNumber>=0?content.slice(0,firstNumber).trim():'';
-    if(!/[a-z]{3}/i.test(lead)||/^(?:(?:then|and|for|reps|sets?|drop|to|at|with)\s*)+$/i.test(lead))continue;
-    const parsed=parseProgressivePhrase(content,'external',defaultUnit);
-    unaccounted.push({
-      start,source:content.trim(),ambiguity:'unidentified',
-      sets:parsed?.sets||[],
-      warnings:['An exercise in this part of your description was not identified. Correct the description before saving.']
-    });
+    if(firstNumber<0||!/[a-z]{3}/i.test(lead))continue;
+    if(!/\d+(?:\.\d+)?\s*(?:kg|lb|x|×|for\b)|\d+\s+sets?\b/i.test(content))continue;
+    if(/^(?:(?:then|and|for|reps|sets?|drop|to|at|with)\s*)+$/i.test(lead))continue;
+    addUnknown(start,start+Math.min(lead.length,content.length),'unidentified',lead);
   }
-  return unaccounted.sort((a,b)=>a.start-b.start);
+  candidates.sort((a,b)=>a.start-b.start||b.end-a.end);
+  const compact=[];
+  for(const candidate of candidates){
+    if(compact.some(c=>candidate.start>=c.start&&candidate.start<c.end))continue;
+    compact.push(candidate);
+  }
+  return compact.map((candidate,i)=>{
+    let start=candidate.start;
+    if(i===0 && /^\s*(?:warm(?:\s|-)?up\s*|did some\s*)$/i.test(text.slice(0,start)))start=0;
+    const next=compact[i+1]?.start??text.length;
+    let end=next;
+    const punctuation=/[.;\n](?=\s*[a-z])/i.exec(text.slice(candidate.end,next));
+    if(punctuation)end=Math.min(end,candidate.end+punctuation.index);
+    const phrase=text.slice(start,end).trim().replace(/[.;]\s*$/,'').trim();
+    const mixedAssistance=/\bassist(?:ed|ance)?\b/i.test(phrase)&&/\b(?:bodyweight|body\s*weight)\b/i.test(phrase);
+    let parsed=mixedAssistance
+      ?{sets:[],warnings:['Assisted and bodyweight work are different loading modes. Split these into separately specified exercises before saving.'],recognized:false}
+      :parseProgressivePhrase(phrase,candidate.exercise?.loadType||'external',defaultUnit);
+    if(!parsed)parsed={sets:[],warnings:[],recognized:false};
+    const warnings=unique([
+      ...(parsed.warnings||[]),
+      ...(candidate.ambiguity==='squat'?['Squat type was not specified. Choose the exercise before saving.']:[]),
+      ...(candidate.ambiguity==='unidentified'?['This exercise needs identification. Verify its sets before saving.']:[])
+    ]);
+    return {...candidate,source:phrase,sets:parsed.sets,warnings,
+      sourceStart:candidate.start,needsRewrite:mixedAssistance};
+  });
+}
+function findUnaccountedExerciseSegments(source,mentions,defaultUnit='kg'){
+  return buildSmartLogSourceInventory(source,mentions,defaultUnit)
+    .filter(x=>!x.recognised).map(x=>({
+      start:x.start,source:x.source,ambiguity:x.ambiguity,
+      sets:x.sets,warnings:x.warnings,needsRewrite:x.needsRewrite
+    }));
 }
 
 function validateReview(parsed){
@@ -143,6 +175,7 @@ function validateReview(parsed){
   if(!Array.isArray(parsed?.items)||!parsed.items.length)return {ok:false,why:'No activities detected'};
   for(const item of parsed.items){
     if(item.kind!=='resistance')continue;
+    if(item.p1RequiresRewrite)return {ok:false,why:'Split the assisted and bodyweight movements in the description before saving'};
     if(!item.exerciseId)return {ok:false,why:'Choose the correct exercise'};
     if(!Array.isArray(item.sets)||!item.sets.length)return {ok:false,why:'Enter at least one set for '+item.name};
     for(const s of item.sets){
@@ -159,7 +192,7 @@ function validateReview(parsed){
   return {ok:true,why:''};
 }
 if(typeof globalThis!=='undefined'&&globalThis.__LASTSET_TEST_ONLY__){
-  globalThis.LastSetSmartLogP1Test={parseProgressivePhrase,reviewWarnings,validateReview,findUnaccountedExerciseSegments};
+  globalThis.LastSetSmartLogP1Test={parseProgressivePhrase,reviewWarnings,validateReview,findUnaccountedExerciseSegments,buildSmartLogSourceInventory};
   return;
 }
 if(typeof window==='undefined'||typeof parseSmartWorkout!=='function')return;
@@ -170,59 +203,57 @@ parseSmartWorkout=function(text){
   const source=safe(text),unit=typeof data!=='undefined'?(data?.profile?.weightUnit||'kg'):'kg';
   try{
     const mentions=typeof findExerciseMentions==='function'?(findExerciseMentions(source)||[]).slice().sort((a,b)=>a.start-b.start):[];
+    const inventory=buildSmartLogSourceInventory(source,mentions,unit);
     const used=new Set();
-    for(let i=0;i<mentions.length;i++){
-      const m=mentions[i];
-      // Keep a leading warm-up instruction with the first named exercise.
-      // Starting at "bench" alone would incorrectly mark warm-up sets as working.
-      const lead=i===0?source.slice(0,m.start):'';
-      const start=i===0&&/^\s*warm(?:\s|-)?up\s*$/i.test(lead)?0:m.start;
-      const segment=source.slice(start,i+1<mentions.length?mentions[i+1].start:source.length);
-      const index=result.items.findIndex((item,k)=>!used.has(k)&&item.kind==='resistance'&&item.exerciseId===m.exercise?.id);
-      const parsed=parseProgressivePhrase(segment,m.exercise?.loadType||'external',unit);
-      if(index<0){
-        // Recognised exercise missing from the previous parsing layer.
-        // Restore it to the review instead of silently dropping it.
-        const item={
-          kind:'resistance',exerciseId:m.exercise?.id||null,name:m.exercise?.name||'Unidentified exercise',
-          equipment:m.exercise?.equipment||'',loadType:m.exercise?.loadType||'external',
-          primaryMuscles:m.exercise?.muscles||[],sets:parsed?.sets||[],
-          p1Review:true,p1Source:segment.trim(),p1SourceStart:m.start,
-          p1Warnings:['This exercise was absent from the initial parse. Verify every set.'],
-          p1Acknowledged:false,notes:'Original Smart Log: '+segment.trim()
-        };
-        result.items.push(item);
-        continue;
-      }
-      used.add(index);
-      const item=result.items[index];
-      item.p1SourceStart=m.start;
-      if(!parsed)continue;
-      if(parsed.sets.length)item.sets=parsed.sets;
+    const previousItems=result.items.slice();
+    const ordered=[];
+    for(const entry of inventory){
+      let index=previousItems.findIndex((item,k)=>!used.has(k)&&item.kind==='resistance'&&entry.exercise&&item.exerciseId===entry.exercise.id);
+      if(index<0 && entry.ambiguity==='squat')
+        index=previousItems.findIndex((item,k)=>!used.has(k)&&item.kind==='resistance'&&!item.exerciseId&&item.ambiguity==='squat');
+      if(index<0 && entry.ambiguity==='unidentified')
+        index=previousItems.findIndex((item,k)=>!used.has(k)&&item.kind==='resistance'&&!item.exerciseId&&item.ambiguity!=='squat');
+      if(index>=0)used.add(index);
+      const ex=entry.exercise;
+      const item=index>=0?previousItems[index]:{
+        kind:'resistance',exerciseId:ex?.id||null,name:ex?.name||(entry.ambiguity==='squat'?'Squat — choose variation':'Unidentified exercise'),
+        equipment:ex?.equipment||'',loadType:ex?.loadType||'external',
+        primaryMuscles:ex?.muscles||[],sets:[],notes:null
+      };
+      // Always replace legacy-parser sets with this exercise's *own* source.
+      // Keeping a legacy set when the new segmented parser returns nothing
+      // would reintroduce the invented 3 kg × 8 Deadlift set.
+      if(entry.sets.length)item.sets=entry.sets;
+      else if(entry.needsRewrite || /(?:\bassist(?:ed|ance)?\b|\bmax\b)/i.test(entry.source))item.sets=[];
+      else if(ex && typeof parseExerciseSetsV11==='function'){
+        const fallback=parseExerciseSetsV11(ex,entry.source);
+        item.sets=Array.isArray(fallback)?fallback:[];
+      }else item.sets=[];
+      item.exerciseId=ex?.id||null;
+      item.name=ex?.name||(entry.ambiguity==='squat'?'Squat — choose variation':'Unidentified exercise');
+      item.equipment=ex?.equipment||'';
+      item.loadType=ex?.loadType||'external';
+      item.primaryMuscles=ex?.muscles||[];
+      item.ambiguity=entry.ambiguity||undefined;
+      item.p1Source=entry.source;
+      item.p1SourceStart=entry.sourceStart;
       item.p1Review=true;
-      item.p1Source=segment.trim();
-      item.p1Warnings=parsed.warnings;
       item.p1Acknowledged=false;
-      item.notes=[item.notes,'Original Smart Log: '+item.p1Source].filter(Boolean).join(' · ');
+      item.p1RequiresRewrite=entry.needsRewrite;
+      item.p1Warnings=unique([...entry.warnings,...(entry.needsRewrite?['Edit and split the original description before saving.']:[])]);
+      item.notes=[index>=0?previousItems[index].notes:null,'Original Smart Log: '+entry.source].filter(Boolean).join(' · ');
+      ordered.push(item);
     }
-    for(const missing of findUnaccountedExerciseSegments(source,mentions,unit)){
-      result.items.push({
-        kind:'resistance',exerciseId:null,
-        name:missing.ambiguity==='squat'?'Squat — choose variation':'Unidentified exercise',
-        equipment:'',primaryMuscles:[],loadType:'external',
-        sets:missing.sets,p1Review:true,p1Source:missing.source,p1SourceStart:missing.start,
-        p1Warnings:missing.warnings,p1Acknowledged:false,
-        ambiguity:missing.ambiguity,notes:'Original Smart Log: '+missing.source
-      });
-    }
-    // Put the unresolved source segment back where it appeared in the text.
-    // Never move cardio records into resistance or drop original items.
-    result.items.sort((a,b)=>(a.p1SourceStart??Number.MAX_SAFE_INTEGER)-(b.p1SourceStart??Number.MAX_SAFE_INTEGER));
-    result.p1DetectedExerciseCount=result.items.filter(item=>item.kind==='resistance').length;
-    if(result.items.some(item=>item.kind==='resistance'&&!item.exerciseId)){
+    // Preserve cardio data and genuinely independent inferred records. Drop
+    // only unclaimed legacy resistance records that conflict with source
+    // inventory, to avoid duplicate bare-squat cards and fabricated sets.
+    const outside=previousItems.filter((item,k)=>item.kind!=='resistance'||(!used.has(k)&&inventory.length===0));
+    result.items=[...ordered,...outside];
+    result.p1DetectedExerciseCount=ordered.length;
+    if(ordered.some(item=>!item.exerciseId||item.p1RequiresRewrite)){
       result.confidence=Math.min(Number(result.confidence)||0.5,0.54);
       result.needsConfirmation=true;
-      result.clarification='An exercise requires identification before this workout can be saved.';
+      result.clarification='Confirm the exercise and each set before saving.';
     }
   }catch(err){
     console.warn('Smart Log P1 exercise inventory failed safely',err);
