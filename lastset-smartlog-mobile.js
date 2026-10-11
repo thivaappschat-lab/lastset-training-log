@@ -3,13 +3,14 @@
    or weaken the original P1 validation gate. */
 (() => {
 'use strict';
-const VERSION='0.16.6-success-dismiss';
+const VERSION='0.16.7-idempotent-retry';
 if(typeof window==='undefined'||typeof state==='undefined'||typeof render!=='function')return;
 const KEY_PREFIX='lastset-smartlog-draft-v2:';
 const esc=v=>typeof escapeHtml==='function'?escapeHtml(String(v??'')):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
 const dateOk=s=>/^\d{4}-\d\d-\d\d$/.test(String(s||''));
 let expandedIndex=-1, sheetIndex=-1, success=false, saving=false, draftError=false, noticeDismissed=false;
 let savedWorkoutId=null, savedWorkoutDate=null;
+let failedSmartSave=null;
 const prefersDark=window.matchMedia?.('(prefers-color-scheme: dark)');
 function getUserKey(){return KEY_PREFIX+String(data?.profile?.userId||data?.profile?.userLabel||data?.profile?.name||'default').replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,100);}
 function mode(){return ['system','light','dark'].includes(data?.profile?.themeMode)?data.profile.themeMode:'system';}
@@ -247,27 +248,71 @@ saveSmartLogWorkout=function(){
   if(state.aiParsed?.items?.some(item=>item?.p1Review)&&issues(state.aiParsed).length){
     sheetIndex=issues(state.aiParsed)[0].i;render();return;
   }
+  if(!state.aiParsed?.items?.length){
+    showToast('Nothing to log');return;
+  }
   saving=true;
   writeDraft();
+  const requestedDate=state.selectedDate;
+  const parsedFingerprint=JSON.stringify(state.aiParsed);
   const learning=(state.aiParsed?.items||[]).filter(item=>item.p1RememberAlias&&item.p1WasUnidentified)
     .map(item=>({...item}));
+  const persisted=()=>{
+    try{return localStorage.getItem('lastset-data-v1');}
+    catch(_){return null;}
+  };
+  // Persisted work and in-memory work can diverge when Safari's quota fills,
+  // or when the active profile registry rejects the second storage write.
+  // Retrying must never execute the same merge twice.
+  const pending=failedSmartSave;
+  const sameAttempt=!!(pending&&pending.date===requestedDate&&
+    pending.parsed===parsedFingerprint&&
+    pending.after===JSON.stringify(data));
+  if(pending&&!sameAttempt){
+    // User changed the draft after a failure. Only reset and re-interpret
+    // from the durable earlier snapshot when no write had been committed.
+    if(persisted()===pending.persistedBefore){
+      data=JSON.parse(pending.before);
+      failedSmartSave=null;
+    }else{
+      saving=false;
+      showToast('Save recovery needs review. Export the emergency backup before reloading; no duplicate was added.');
+      return;
+    }
+  }
+  const previous=JSON.stringify(data);
+  const persistedBefore=persisted();
+  const beforeIds=new Set((data.sessions?.[requestedDate]||[]).map(s=>s.id));
   try{
-    const date=state.selectedDate;
-    const beforeIds=new Set((data.sessions?.[date]||[]).map(s=>s.id));
-    baseSave();
+    if(sameAttempt){
+      // The mutation has already happened once and remains in memory.
+      // Retry only its persistence/registry synchronization.
+      saveData(data);
+      state.aiParsed=null;state.aiDraft='';state.aiError='';state.aiSource='';
+      state.aiCorrection='';state.smartConversation=[];state.aiLoading=false;
+      state.view='day';
+      showToast('Smart workout logged');
+    }else{
+      baseSave();
+    }
     if(state.aiParsed===null&&state.view==='day'){
-      const sessions=data.sessions?.[date]||[];
+      failedSmartSave=null;
+      const sessions=data.sessions?.[requestedDate]||[];
       const latest=sessions.find(s=>s.type==='resistance'&&s.id&&!beforeIds.has(s.id))
         ||sessions.find(s=>s.type==='resistance')
         ||sessions.find(s=>s.id&&!beforeIds.has(s.id))
         ||sessions[sessions.length-1];
       savedWorkoutId=latest?.id||null;
-      savedWorkoutDate=date;
+      savedWorkoutDate=requestedDate;
       saveLearnedAliases(learning);
       clearDraft();expandedIndex=-1;sheetIndex=-1;success=true;render();
     }
   }catch(err){
-    console.error('Smart Log save failed; draft retained',err);
+    failedSmartSave={
+      date:requestedDate,parsed:parsedFingerprint,before:previous,
+      after:JSON.stringify(data),persistedBefore
+    };
+    console.error('Smart Log save failed; draft retained for safe retry',err);
     success=false;
     if(typeof reportStorageFailure==='function')reportStorageFailure(err);
   }finally{saving=false;}
