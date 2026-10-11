@@ -388,15 +388,19 @@ function startVoice(){
   const originalDraft=String(state.aiDraft||'');
   const overlay=document.createElement('div');
   overlay.className='ls-v14-voice';
-  overlay.innerHTML='<div class="ls-v14-voice-card"><div class="ls-v14-mic">●</div><div class="ls-i-kicker">Voice Smart Log</div><h3 data-voice-heading>Listening…</h3><p data-voice-text aria-live="polite">Say your exercises, weights and reps naturally.</p><p class="ls-v14-voice-hint" data-voice-hint>Speak at your normal pace. Tap Done when finished. A recording can last up to 60 seconds.</p><div class="ls-v14-voice-actions"><button class="primary" data-voice-done type="button">Done</button><button class="secondary" data-voice-continue type="button" hidden>Continue speaking</button><button class="secondary" data-voice-cancel type="button">Cancel</button></div></div>';
+  overlay.innerHTML='<div class="ls-v14-voice-card"><div class="ls-v14-mic">●</div><div class="ls-i-kicker">Voice Smart Log</div><h3 data-voice-heading>Listening…</h3><p data-voice-text aria-live="polite">Say your exercises, weights and reps naturally.</p><p class="ls-v14-voice-hint" data-voice-hint>Speak at your normal pace. Tap Done when finished. A recording can last up to 60 seconds.</p><div class="ls-v14-mic-help" data-voice-permission-help role="status" hidden><strong>How to allow the microphone</strong><p data-voice-settings-guide></p><small>iOS may remember a denial. LastSet cannot override the phone’s privacy setting, but you can retry after changing it. Your draft is safe.</small></div><div class="ls-v14-voice-actions"><button class="primary" data-voice-done type="button">Done</button><button class="secondary" data-voice-retry type="button" hidden>Try microphone again</button><button class="secondary" data-voice-continue type="button" hidden>Continue speaking</button><button class="secondary" data-voice-type type="button" hidden>Type workout instead</button><button class="secondary" data-voice-cancel type="button">Cancel</button></div></div>';
   document.body.appendChild(overlay);
   const heading=overlay.querySelector('[data-voice-heading]');
   const hint=overlay.querySelector('[data-voice-hint]');
   const transcriptNode=overlay.querySelector('[data-voice-text]');
   const continueButton=overlay.querySelector('[data-voice-continue]');
   const doneButton=overlay.querySelector('[data-voice-done]');
+  const retryButton=overlay.querySelector('[data-voice-retry]');
+  const typeButton=overlay.querySelector('[data-voice-type]');
+  const permissionHelp=overlay.querySelector('[data-voice-permission-help]');
+  const settingsGuide=overlay.querySelector('[data-voice-settings-guide]');
   let recognition=null,finalText='',liveText='',pieces=[];
-  let settled=false,cancelled=false,paused=false,finishing=false;
+  let settled=false,cancelled=false,paused=false,finishing=false,permissionDenied=false;
   let watchdog=null,stopFallback=null;
   const clearTimers=()=>{
     if(watchdog!==null){clearTimeout(watchdog);watchdog=null;}
@@ -453,10 +457,36 @@ function startVoice(){
     doneButton.disabled=false;
     refreshTranscript();
   };
+  const showPermissionBlocked=(kind)=>{
+    if(settled||cancelled||finishing)return;
+    clearTimers();
+    paused=true;
+    permissionDenied=true;
+    if(voiceSession===recognition)voiceSession=null;
+    const isPwa=!!(navigator.standalone||window.matchMedia?.('(display-mode: standalone)')?.matches);
+    heading.textContent='Microphone access blocked';
+    hint.textContent='You can try again now. If iPhone remembers “Don’t Allow”, change its permission and try once more.';
+    settingsGuide.textContent=isPwa
+      ? 'Installed LastSet: check iPhone Settings → Privacy & Security → Microphone → LastSet (if listed). Otherwise open the same website in Safari → page menu → Website Settings → Microphone → Ask or Allow, then return and retry.'
+      : 'In Safari: tap the page menu beside the address bar → Website Settings → Microphone → Ask or Allow. Then come back and tap Try microphone again.';
+    permissionHelp.hidden=false;
+    retryButton.hidden=false;
+    typeButton.hidden=false;
+    continueButton.hidden=true;
+    doneButton.hidden=!capturedText();
+    doneButton.disabled=!capturedText();
+    transcriptNode.textContent=capturedText()||'No speech captured yet. Your workout draft is still available.';
+  };
   const beginTake=()=>{
     clearTimers();
     paused=false;
     finishing=false;
+    permissionDenied=false;
+    permissionHelp.hidden=true;
+    retryButton.hidden=true;
+    typeButton.hidden=true;
+    doneButton.hidden=false;
+    doneButton.disabled=false;
     finalText='';
     liveText='';
     continueButton.hidden=true;
@@ -487,13 +517,7 @@ function startVoice(){
       const error=String(e?.error||'');
       if(finishing){commitVoice();return;}
       if(error==='not-allowed'||error==='service-not-allowed'){
-        if(!capturedText()){
-          settled=true;state.aiDraft=originalDraft;cleanup();
-          showToast('Microphone permission is blocked for LastSet.');
-          return;
-        }
-        showPaused('Microphone access stopped. Your words are preserved. Tap Done to review.');
-        continueButton.hidden=true;
+        showPermissionBlocked(error);
       }else if(error==='audio-capture'){
         showPaused('The microphone became unavailable. Your captured words are preserved.');
       }else{
@@ -503,6 +527,9 @@ function startVoice(){
     r.onend=()=>{
       if(settled||cancelled||recognition!==r)return;
       if(finishing){commitVoice();return;}
+      // A denied permission often fires onerror followed by onend.
+      // Do not erase the recovery instructions or close the retry screen.
+      if(permissionDenied)return;
       showPaused('Your browser stopped listening. No words were submitted. Continue speaking or tap Done.');
     };
     try{
@@ -516,7 +543,8 @@ function startVoice(){
       },MAX_LISTEN_MS);
     }catch(err){
       console.warn('Voice recording could not restart',err);
-      showPaused('Microphone could not start. Your existing words remain available.');
+      if(/notallowed|permission|denied|security/i.test(String(err?.name||'')+' '+String(err?.message||'')))showPermissionBlocked('not-allowed');
+      else showPaused('Microphone could not start. Your existing words remain available.');
     }
   };
   doneButton.onclick=()=>{
@@ -534,6 +562,24 @@ function startVoice(){
     const previous=takeText();
     if(previous)pieces.push(previous);
     beginTake();
+  };
+  retryButton.onclick=()=>{
+    if(settled||cancelled||!paused||!permissionDenied)return;
+    const previous=takeText();
+    if(previous)pieces.push(previous);
+    // Starting a fresh SpeechRecognition from this explicit tap lets the
+    // browser prompt again when its site permission is set to Ask.
+    // Persistent Deny can only be changed by the user in iPhone settings.
+    beginTake();
+  };
+  typeButton.onclick=()=>{
+    if(settled||cancelled)return;
+    settled=true;
+    state.aiDraft=combinedText();
+    try{recognition?.abort();}catch(_){}
+    cleanup();render();
+    const input=document.getElementById('ai-text');
+    input?.focus?.();
   };
   overlay.querySelector('[data-voice-cancel]').onclick=()=>{
     if(settled)return;
