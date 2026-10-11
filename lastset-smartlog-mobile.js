@@ -3,7 +3,7 @@
    or weaken the original P1 validation gate. */
 (() => {
 'use strict';
-const VERSION='0.16.5-direct-exercise-edit';
+const VERSION='0.16.5.1-direct-exercise-edit';
 if(typeof window==='undefined'||typeof state==='undefined'||typeof render!=='function')return;
 const KEY_PREFIX='lastset-smartlog-draft-v2:';
 const esc=v=>typeof escapeHtml==='function'?escapeHtml(String(v??'')):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
