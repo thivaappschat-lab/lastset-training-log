@@ -64,7 +64,10 @@
   .ls-mobile-set-fields input,.ls-mobile-set-fields select{font-size:16px}
 }
 @media(max-width:355px){.ls-mobile-set-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
-/* Device appearance: existing brand rules are dark-first and require explicit
+.ls-mobile-keyboard-open .ls-mobile-sticky{bottom:calc(10px + var(--ls-keyboard-offset,0px))}
+.ls-mobile-keyboard-open .bottom-nav{display:none !important}
+.ls-mobile-keyboard-open .ls-mobile-review{padding-bottom:84px}
+ /* Device appearance: existing brand rules are dark-first and require explicit
    light overrides, not only a background color change. */
 html[data-lastset-theme="light"]{
   --bg:#f5f6fb !important;--surface:#ffffff !important;
