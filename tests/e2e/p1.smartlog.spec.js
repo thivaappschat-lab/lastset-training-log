@@ -387,3 +387,51 @@ test.describe('Round 4 voice interaction with mocked microphone',()=>{
     expect(resistance(await records(page))).toBeUndefined();
   });
 });
+
+
+test.describe('iPhone voice mishearing recovery — 50 kg bench and assisted dips',()=>{
+  test('garbled ASR retains both lifts as flagged candidates and saves only after explicit confirmation',async({page})=>{
+    await start(page);
+    await parse(page,'50 KG Three steps faucets bench press and then my sister 50 KG seven wraps three cents');
+    await expect(page.locator('.ls-mobile-exercise')).toHaveCount(2);
+    await expect(page.locator('.ls-mobile-status')).toContainText('2 exercises');
+    await expect(page.locator('[data-mobile-fix-next]')).toBeVisible();
+    const items=await page.evaluate(()=>state.aiParsed.items.map(x=>({
+      id:x.exerciseId,sets:x.sets.map(s=>[s.weightKg,s.reps]),warnings:x.p1Warnings,source:x.p1Source
+    })));
+    expect(items[0].id).toBe('bench-press');
+    expect(items[0].sets).toEqual(Array.from({length:4},()=>[50,3]));
+    expect(items[1].id).toBeNull();
+    expect(items[1].sets).toEqual(Array.from({length:3},()=>[50,7]));
+    expect(items[1].warnings.join(' ')).toMatch(/not assumed/i);
+    expect(resistance(await records(page))).toBeUndefined();
+    await page.locator('[data-mobile-open="0"]').click();
+    await expect(page.locator('.ls-mobile-sheet')).toContainText('Speech recognition');
+    await page.locator('[data-p1-ack="0"]').check();
+    await page.locator('[data-mobile-sheet-close]').first().click();
+    await expect(page.locator('[data-mobile-fix-next]')).toBeVisible();
+    await page.locator('[data-mobile-open="1"]').click();
+    await page.locator('[data-p1-exercise="1"]').selectOption('assisted-dip');
+    await expect(page.locator('.ls-mobile-sheet')).toContainText('Assisted Dip');
+    await page.locator('[data-p1-ack="1"]').check();
+    await page.locator('[data-mobile-sheet-close]').first().click();
+    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeEnabled();
+    await page.locator('[data-action="confirm-ai-workout"]').click();
+    await expect(page.locator('.ls-mobile-success')).toBeVisible();
+    const session=resistance(await records(page));
+    expect(session.exercises.map(x=>x.exerciseId)).toEqual(['bench-press','assisted-dip']);
+    expect(session.exercises[0].sets.map(s=>[s.weight,s.reps])).toEqual(Array.from({length:4},()=>[50,3]));
+    expect(session.exercises[1].sets.map(s=>[s.weight,s.reps])).toEqual(Array.from({length:3},()=>[50,7]));
+  });
+  test('clear utterance: bench 50 kg 3 reps 4 sets and assisted dip 50 kg 7 reps 3 sets',async({page})=>{
+    await start(page);
+    await parse(page,'Bench press 50 kg 3 reps 4 sets. Assisted dip 50 kg 7 reps 3 sets');
+    const items=await page.evaluate(()=>state.aiParsed.items.filter(x=>x.kind==='resistance').map(x=>({
+      id:x.exerciseId,sets:x.sets.map(s=>[s.weightKg,s.reps]),loadType:x.loadType
+    })));
+    expect(items.map(x=>x.id)).toEqual(['bench-press','assisted-dip']);
+    expect(items[0].sets).toEqual(Array.from({length:4},()=>[50,3]));
+    expect(items[1].sets).toEqual(Array.from({length:3},()=>[50,7]));
+    expect(items[1].loadType).toBe('assisted');
+  });
+});
