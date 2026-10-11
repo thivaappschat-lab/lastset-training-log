@@ -320,6 +320,9 @@
     saveData=function(value){
       baseSaveData(value);
       syncActiveSnapshot(value);
+      // Only the verified two-part transaction clears an earlier
+      // storage-failure notice. A partial active-profile write cannot.
+      document.getElementById('ls-save-failure')?.remove();
       return true;
     };
   }
