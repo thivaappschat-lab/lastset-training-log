@@ -51,6 +51,7 @@ function begin(source){
   if(source?.kind==='preset'){
     if(category==='cardio')draft.cardio={...draft.cardio,...clone(source.preset.values)};
     if(category==='mobility')draft.mobility={...draft.mobility,...clone(source.preset.values)};
+    if(category==='smart')draft.smartText=String(source.preset.values?.text||'');
   }
   if(category==='smart'&&mode==='quick'){
     let words='';
@@ -174,7 +175,7 @@ function workoutScreen(){
     (d.category==='resistance'?resistanceScreen():d.category==='cardio'?cardioScreen():d.category==='mobility'?mobilityScreen():smartScreen())+
     (d.copied&&!d.confirmed?'<label class="ls-p2-check"><input type="checkbox" data-p2-confirm-copy> I checked and corrected the copied details to reflect what I actually completed.</label>':'')+
     (message?'<p class="ls-p2-message" role="status">'+esc(message)+'</p>':'')+
-    '<div class="ls-p2-footer">'+(failure?'<button class="secondary" data-p2-retry>Retry draft storage</button><button class="secondary" data-p2-export>Export draft backup</button>':'')+
+    '<div class="ls-p2-footer">'+(d.category!=='resistance'?'<button class="secondary" data-p2-save-preset>☆ Save as a reusable '+(d.category==='smart'?'Smart Log description':'activity')+'</button>':'')+(failure?'<button class="secondary" data-p2-retry>Retry draft storage</button><button class="secondary" data-p2-export>Export draft backup</button>':'')+
     '<button class="primary" data-p2-finish>'+ (d.mode==='quick'?'Review & Save':'Finish & Review')+'</button>'+
     '<button class="ls-p2-discard" data-p2-discard>Discard active draft</button></div></main>';
 }
@@ -245,6 +246,16 @@ function review(){
   if(!persist()){render();return;}
   go('p2-finish');
 }
+function savePreset(){
+  const d=active();if(!d)return;
+  const name=window.prompt('Name this reusable '+catNames[d.category]+' session');if(!name?.trim())return;
+  if(name.trim().length>60){message='Choose a shorter name.';render();return;}
+  const values=d.category==='smart'?{text:d.smartText}:d.category==='cardio'?d.cardio:d.mobility;
+  const copy=clone(data);copy.p2Presets=Array.isArray(copy.p2Presets)?copy.p2Presets:[];
+  copy.p2Presets.push({id:cryptoId(),category:d.category,name:name.trim(),values:clone(values),createdAt:Date.now()});
+  try{saveData(copy);data=copy;message='Reusable session saved to this profile.';render();}
+  catch(_){message='Could not save the reusable session. Your workout draft is unchanged.';render();}
+}
 function commit(){
   const d=active();if(!d)return;if(failure||!checkResistance()||(d.copied&&!d.confirmed)){message='Review the draft before saving.';render();return;}
   const profileId=d.userId;
@@ -310,7 +321,7 @@ screen=function(){return /^p2-(mode|sources|workout|finish)$/.test(state.view)?p
 const oldRender=render;
 render=function(){oldRender();decorateToday();document.documentElement.dataset.lastsetP2=V;};
 document.addEventListener('click',e=>{
-  const el=e.target.closest?.('[data-p2-entry],[data-p2-resume],[data-p2-mode],[data-p2-back],[data-p2-blank],[data-p2-source-tab],[data-p2-source],[data-p2-change-mode],[data-p2-toggle-ex],[data-p2-remove-ex],[data-p2-add-set],[data-p2-remove-set],[data-p2-exercise],[data-p2-add-activity],[data-p2-remove-entry],[data-p2-parse],[data-p2-accept-smart],[data-p2-finish],[data-p2-return],[data-p2-commit],[data-p2-discard],[data-p2-skip-rest],[data-p2-pause],[data-p2-retry],[data-p2-export]');
+  const el=e.target.closest?.('[data-p2-entry],[data-p2-resume],[data-p2-mode],[data-p2-back],[data-p2-blank],[data-p2-source-tab],[data-p2-source],[data-p2-change-mode],[data-p2-toggle-ex],[data-p2-remove-ex],[data-p2-add-set],[data-p2-remove-set],[data-p2-exercise],[data-p2-add-activity],[data-p2-remove-entry],[data-p2-parse],[data-p2-accept-smart],[data-p2-finish],[data-p2-return],[data-p2-commit],[data-p2-discard],[data-p2-skip-rest],[data-p2-pause],[data-p2-retry],[data-p2-export],[data-p2-save-preset]');
   if(!el)return;e.preventDefault();e.stopImmediatePropagation();
   const d=active(),i=Number(el.dataset.p2ToggleEx||el.dataset.p2RemoveEx||el.dataset.p2AddSet||0);
   if(el.dataset.p2Entry)open(el.dataset.p2Entry);
@@ -337,6 +348,7 @@ document.addEventListener('click',e=>{
   else if(el.hasAttribute('data-p2-remove-entry')&&d){d.entries.splice(Number(el.dataset.p2RemoveEntry),1);persist();render();}
   else if(el.hasAttribute('data-p2-parse'))parseSmart();
   else if(el.hasAttribute('data-p2-accept-smart'))acceptSmart();
+  else if(el.hasAttribute('data-p2-save-preset'))savePreset();
   else if(el.hasAttribute('data-p2-finish'))review();
   else if(el.hasAttribute('data-p2-return'))go('p2-workout');
   else if(el.hasAttribute('data-p2-commit'))commit();
