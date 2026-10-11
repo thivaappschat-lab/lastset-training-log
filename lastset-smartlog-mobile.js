@@ -3,12 +3,13 @@
    or weaken the original P1 validation gate. */
 (() => {
 'use strict';
-const VERSION='0.16.5.1-direct-exercise-edit';
+const VERSION='0.16.6-success-dismiss';
 if(typeof window==='undefined'||typeof state==='undefined'||typeof render!=='function')return;
 const KEY_PREFIX='lastset-smartlog-draft-v2:';
 const esc=v=>typeof escapeHtml==='function'?escapeHtml(String(v??'')):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
 const dateOk=s=>/^\d{4}-\d\d-\d\d$/.test(String(s||''));
 let expandedIndex=-1, sheetIndex=-1, success=false, saving=false, draftError=false, noticeDismissed=false;
+let savedWorkoutId=null, savedWorkoutDate=null;
 const prefersDark=window.matchMedia?.('(prefers-color-scheme: dark)');
 function getUserKey(){return KEY_PREFIX+String(data?.profile?.userId||data?.profile?.userLabel||data?.profile?.name||'default').replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,100);}
 function mode(){return ['system','light','dark'].includes(data?.profile?.themeMode)?data.profile.themeMode:'system';}
@@ -199,9 +200,15 @@ function resumeBanner(){
   if(!entry||entry.querySelector('.ls-mobile-resume'))return;
   entry.insertAdjacentHTML('afterbegin','<div class="ls-mobile-resume" role="status"><strong>Resume unfinished workout?</strong><p>A Smart Log draft from '+esc(draft.date)+' is stored on this phone.</p><div><button class="primary" type="button" data-mobile-resume>Resume workout</button><button class="secondary" type="button" data-mobile-dismiss>Not now</button></div></div>');
 }
+function dismissSuccessBanner(){
+  success=false;
+  document.querySelectorAll('.ls-mobile-success').forEach(node=>node.remove());
+}
 function successBanner(){
+  // The confirmation is mounted on body, outside #app; rerendering #app
+  // cannot remove it. Keep every overlay in sync with saved confirmation state.
+  document.querySelectorAll('.ls-mobile-success').forEach(node=>node.remove());
   if(!success||state.view!=='day')return;
-  document.querySelector('.ls-mobile-success')?.remove();
   const overlay=document.createElement('div');
   overlay.className='ls-mobile-success';
   overlay.innerHTML='<section role="dialog" aria-modal="true" aria-labelledby="ls-mobile-success-title"><div class="ls-mobile-success-icon">✓</div><h2 id="ls-mobile-success-title">Workout saved!</h2><p>Your reviewed workout was saved to this device.</p><button type="button" class="primary" data-mobile-view>View workout</button><button type="button" class="secondary" data-mobile-today>Back to Today</button></section>';
@@ -245,8 +252,17 @@ saveSmartLogWorkout=function(){
   const learning=(state.aiParsed?.items||[]).filter(item=>item.p1RememberAlias&&item.p1WasUnidentified)
     .map(item=>({...item}));
   try{
+    const date=state.selectedDate;
+    const beforeIds=new Set((data.sessions?.[date]||[]).map(s=>s.id));
     baseSave();
     if(state.aiParsed===null&&state.view==='day'){
+      const sessions=data.sessions?.[date]||[];
+      const latest=sessions.find(s=>s.type==='resistance'&&s.id&&!beforeIds.has(s.id))
+        ||sessions.find(s=>s.type==='resistance')
+        ||sessions.find(s=>s.id&&!beforeIds.has(s.id))
+        ||sessions[sessions.length-1];
+      savedWorkoutId=latest?.id||null;
+      savedWorkoutDate=date;
       saveLearnedAliases(learning);
       clearDraft();expandedIndex=-1;sheetIndex=-1;success=true;render();
     }
@@ -364,8 +380,27 @@ document.addEventListener('click',event=>{
     noticeDismissed=true;sheetIndex=-1;expandedIndex=-1;render();
   }else if(el.hasAttribute('data-mobile-dismiss')){noticeDismissed=true;render();}
   else if(el.hasAttribute('data-mobile-view')||el.hasAttribute('data-mobile-today')){
-    success=false;render();
-    if(el.hasAttribute('data-mobile-view'))document.querySelector('.session-card,[data-saved-workout]')?.scrollIntoView({block:'start',behavior:'smooth'});
+    const viewWorkout=el.hasAttribute('data-mobile-view');
+    dismissSuccessBanner(); // Remove before re-render, never leave a blocking overlay.
+    if(viewWorkout){
+      if(savedWorkoutDate)state.selectedDate=savedWorkoutDate;
+      state.view='day';
+    }else{
+      state.tab='today';
+      state.selectedDate=isoDate(new Date());
+      state.month=new Date(new Date().getFullYear(),new Date().getMonth(),1);
+      state.view='day';
+    }
+    render();
+    if(viewWorkout){
+      const sessionCard=[...document.querySelectorAll('.session-card')]
+        .find(card=>[...card.querySelectorAll('[data-edit-exercise],[data-delete-session]')]
+          .some(child=>child.dataset.editExercise===savedWorkoutId||child.dataset.deleteSession===savedWorkoutId))
+        ||[...document.querySelectorAll('.session-card')]
+          .find(card=>card.querySelector('[data-edit-exercise]'))
+        ||document.querySelector('.session-card');
+      sessionCard?.scrollIntoView?.({block:'start',behavior:'smooth'});
+    }
   }
 },true);
 document.addEventListener('input',event=>{
