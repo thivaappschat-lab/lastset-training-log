@@ -249,8 +249,7 @@ parseSmartWorkout=function(text){
       const phrase=safe(learned.phrase).trim();
       const ex=EXERCISES.find(e=>e.id===learned.exerciseId);
       if(!phrase||!ex)continue;
-      const safePhrase=phrase.replace(/[.*+?^${}()|[\]\\]/g,'\\    const mentions=typeof findExerciseMentions==='function'?(findExerciseMentions(source)||[]).slice().sort((a,b)=>a.start-b.start):[];
-    const inventory=buildSmartLogSourceInventory(source,mentions,unit);');
+      const safePhrase=phrase.replace(/[.*+?^${}()|[\]\\]/g,match=>'\\'+match);
       inventorySource=inventorySource.replace(new RegExp('\\b'+safePhrase+'\\b','gi'),ex.name);
     }
     const mentions=typeof findExerciseMentions==='function'?(findExerciseMentions(inventorySource)||[]).slice().sort((a,b)=>a.start-b.start):[];
