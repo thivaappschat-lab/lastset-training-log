@@ -495,3 +495,107 @@ test.describe('Round 4C — natural spoken set count is not a rep sequence',()=>
       .toEqual([[50,3],[50,4],[50,5]]);
   });
 });
+
+
+test.describe('0.16.5 — tap exercise, edit sets, opt-in learn',()=>{
+  async function seedHistory(page){
+    await page.evaluate(key=>{
+      const db=JSON.parse(localStorage.getItem(key));
+      db.sessions=db.sessions||{};
+      db.sessions['2026-09-20']=[{id:'seed-assisted-history',type:'resistance',createdAt:Date.now()-1209600000,
+        exercises:[{exerciseId:'assisted-dip',name:'Assisted Dip',loadType:'assisted',sets:[
+          {weight:50,reps:10,setType:'working'},{weight:50,reps:10,setType:'working'},{weight:50,reps:10,setType:'working'}
+        ]}]}];
+      localStorage.setItem(key,JSON.stringify(db));
+    },KEY);
+    await page.reload({waitUntil:'domcontentloaded'});
+    await page.locator('.bottom-nav [data-nav="day"]').click();
+    await page.locator('[data-day-action="describe"]').first().click();
+  }
+  test('history suggestion never triggers old conversation editor; tap Dip and apply all 3×7 directly',async({page})=>{
+    await start(page);
+    await seedHistory(page);
+    await parse(page,'Bench Press 50 kg 3 reps 4 sets. Assisted Dip 50 kg assistance');
+    await expect(page.locator('.ls-mobile-review')).toBeVisible();
+    await expect(page.locator('.smart-turn.pending')).toHaveCount(0);
+    await expect(page.locator('.ls-mobile-exercise')).toHaveCount(2);
+    await expect(page.locator('[data-mobile-fix-next]')).toBeVisible();
+    expect(await page.evaluate(()=>state.aiParsed.items[1].sets.length)).toBe(0);
+    await page.locator('[data-mobile-open="1"]').click();
+    await expect(page.locator('.ls-mobile-sheet')).toBeVisible();
+    await expect(page.locator('[data-memory-use="1"]')).toBeVisible();
+    expect(await page.locator('[data-mobile-quick-reps="1"]').inputValue()).toBe('');
+    await page.locator('[data-mobile-quick-sets="1"]').fill('3');
+    await page.locator('[data-mobile-quick-reps="1"]').fill('7');
+    await page.locator('[data-mobile-quick-weight="1"]').fill('50');
+    await page.locator('[data-mobile-apply="1"]').click();
+    expect(await page.evaluate(()=>state.aiParsed.items[1].sets.map(s=>[s.weightKg,s.reps])))
+      .toEqual([[50,7],[50,7],[50,7]]);
+    await page.locator('[data-mobile-sheet-close]').first().click();
+    await expect(page.locator('.ls-mobile-status')).toContainText('2 exercises · 7 sets');
+    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeEnabled();
+    await page.locator('[data-action="confirm-ai-workout"]').click();
+    await expect(page.locator('.ls-mobile-success')).toBeVisible();
+    await page.reload({waitUntil:'domcontentloaded'});
+    const rows=await page.evaluate(key=>{
+      const entries=Object.values(JSON.parse(localStorage.getItem(key)).sessions).flat().filter(s=>s.type==='resistance'&&s.id!=='seed-assisted-history');
+      return entries.at(-1).exercises.map(ex=>({id:ex.exerciseId,sets:ex.sets.map(s=>[s.weight,s.reps])}));
+    },KEY);
+    expect(rows).toEqual([
+      {id:'bench-press',sets:Array.from({length:4},()=>[50,3])},
+      {id:'assisted-dip',sets:Array.from({length:3},()=>[50,7])}
+    ]);
+    expect(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).memory?.aliases||{},KEY)).toEqual({});
+  });
+  test('bulk edit changes only chosen exercise and survives draft recovery',async({page})=>{
+    await start(page);
+    await parse(page,'Bench Press 80kg for 8, then 85kg for 6 and 5. Assisted Dip 50 kg');
+    await page.locator('[data-mobile-open="1"]').click();
+    await page.locator('[data-mobile-quick-sets="1"]').fill('3');
+    await page.locator('[data-mobile-quick-reps="1"]').fill('7');
+    await page.locator('[data-mobile-quick-weight="1"]').fill('50');
+    await page.locator('[data-mobile-apply="1"]').click();
+    const sets=await page.evaluate(()=>state.aiParsed.items.map(x=>x.sets.map(s=>[s.weightKg,s.reps])));
+    expect(sets).toEqual([[[80,8],[85,6],[85,5]],[[50,7],[50,7],[50,7]]]);
+    await page.reload({waitUntil:'domcontentloaded'});
+    await page.locator('.bottom-nav [data-nav="day"]').click();
+    await page.locator('[data-day-action="describe"]').first().click();
+    await page.locator('[data-mobile-resume]').click();
+    expect(await page.evaluate(()=>state.aiParsed.items.map(x=>x.sets.map(s=>[s.weightKg,s.reps])))).toEqual(sets);
+    expect(resistance(await records(page))).toBeUndefined();
+  });
+  test('corrected misheard name learned only after checkbox and successful save',async({page})=>{
+    await start(page);
+    await parse(page,'Bench Press 50 kg for 3, four sets. My sister Dip 50 kg assistance for 7, three sets.');
+    await page.locator('[data-mobile-fix-next]').click();
+    await page.locator('[data-p1-exercise="1"]').selectOption('assisted-dip');
+    await expect(page.locator('[data-mobile-remember="1"]')).toBeVisible();
+    await page.locator('[data-mobile-remember="1"]').check();
+    await expect(page.locator('[data-mobile-alias-phrase="1"]')).toHaveValue('my sister dip');
+    // Opted-in corrections must not be learned before the workout is saved.
+    expect(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).memory?.aliases?.['my sister dip'],KEY)).toBeUndefined();
+    await page.locator('[data-p1-ack="1"]').check();
+    await page.locator('[data-mobile-sheet-close]').first().click();
+    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeEnabled();
+    await page.locator('[data-action="confirm-ai-workout"]').click();
+    await expect(page.locator('.ls-mobile-success')).toBeVisible();
+    const alias=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).memory?.aliases?.['my sister dip'],KEY);
+    expect(alias?.exerciseId).toBe('assisted-dip');
+    await page.reload({waitUntil:'domcontentloaded'});
+    const next=await page.evaluate(()=>parseSmartWorkout('Bench Press 50 kg for 3, four sets. My sister Dip 50 kg assistance for 7, three sets.'));
+    expect(next.items.map(x=>x.exerciseId)).toEqual(['bench-press','assisted-dip']);
+    expect(next.items[1].sets.map(s=>[s.weightKg,s.reps])).toEqual([[50,7],[50,7],[50,7]]);
+    expect(next.items[1].p1Review).toBe(true);
+  });
+  test('invalid quick values do not alter sets or permit save',async({page})=>{
+    await start(page);
+    await parse(page,'Assisted Dip 50 kg assistance');
+    await page.locator('[data-mobile-open="0"]').click();
+    await page.locator('[data-mobile-quick-sets="0"]').fill('3');
+    await page.locator('[data-mobile-quick-reps="0"]').fill('');
+    await page.locator('[data-mobile-apply="0"]').click();
+    await expect(page.locator('.ls-mobile-quick-error')).toContainText('completed reps');
+    expect(await page.evaluate(()=>state.aiParsed.items[0].sets.length)).toBe(0);
+    await expect(page.locator('[data-action="confirm-ai-workout"]')).toHaveCount(0);
+  });
+});
