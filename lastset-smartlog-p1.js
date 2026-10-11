@@ -200,11 +200,9 @@ function findUnaccountedExerciseSegments(source,mentions,defaultUnit='kg'){
 }
 
 function preserveExplicitMemoryResult(parsed){
-  return !!(parsed && (
-    (Array.isArray(parsed.memoryAssumptions)&&parsed.memoryAssumptions.length) ||
-    (Array.isArray(parsed.memoryLearnedAliases)&&parsed.memoryLearnedAliases.length) ||
-    (Array.isArray(parsed.items)&&parsed.items.some(item=>item?.memorySuggestion))
-  ));
+  // "same as last time" is an explicit history command. A mere suggestion
+  // must not force the old Q&A view or bypass set-level review.
+  return !!(parsed && Array.isArray(parsed.memoryAssumptions)&&parsed.memoryAssumptions.length);
 }
 function validateReview(parsed){
   if(parsed?.p1AuditError)return {ok:false,why:'Exercise detection could not be verified. Edit the description and try again.'};
@@ -240,6 +238,19 @@ parseSmartWorkout=function(text){
   // historical sets. Do not reparse a command such as "same as last time"
   // into an empty or invented workout, or replace the Memory review renderer.
   if(preserveExplicitMemoryResult(result))return result;
+  if(Array.isArray(result.memoryLearnedAliases)&&result.memoryLearnedAliases.length){
+    // The Memory layer already substituted an explicitly learned exercise
+    // alias. Keep its matching and sets intact; enable compact P1 editing.
+    result.items.forEach(item=>{
+      if(item.kind!=='resistance')return;
+      item.p1Review=true;
+      item.p1Acknowledged=false;
+      item.p1Source=safe(text);
+      item.p1Warnings=item.p1Warnings||[];
+      item.p1RequiresRewrite=!!item.p1RequiresRewrite;
+    });
+    return result;
+  }
   const source=safe(text),unit=typeof data!=='undefined'?(data?.profile?.weightUnit||'kg'):'kg';
   try{
     const mentions=typeof findExerciseMentions==='function'?(findExerciseMentions(source)||[]).slice().sort((a,b)=>a.start-b.start):[];
