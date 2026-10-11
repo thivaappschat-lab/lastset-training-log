@@ -203,3 +203,82 @@ test.describe('P2 four-category logging modes and safe source reuse',()=>{
   expect(await sessions(page)).toHaveLength(0);
  });
 });
+
+
+test.describe('P2 recovery and optional timer hardening',()=>{
+ test('cardio as-I-go without timer records one valid session',async({page})=>{
+  await fresh(page);await choose(page,'cardio','free');
+  await expect(page.locator('[data-p2-elapsed]')).toHaveCount(0);
+  await page.locator('[data-p2-field="cardio.duration"]').fill('27');
+  await page.locator('[data-p2-add-activity]').click();
+  await finish(page);
+  const cardio=(await sessions(page)).filter(x=>x.type==='cardio');
+  expect(cardio).toHaveLength(1);expect(cardio[0].duration).toBe(27);
+ });
+ test('Smart Log timer begins optional rest after reviewed resistance, without phantom set',async({page})=>{
+  await fresh(page);await choose(page,'smart','timed');
+  await expect(page.locator('[data-p2-elapsed]')).toBeVisible();
+  await page.locator('[data-p2-smart]').fill('Bench Press 50 kg for 3, four sets.');
+  await page.locator('[data-p2-parse]').click();
+  await page.locator('[data-p2-accept-smart]').click();
+  await expect(page.locator('[data-p2-rest]')).toBeVisible();
+  await expect(page.locator('[data-p2-rest]')).not.toHaveText('00:00');
+  await finish(page);
+  const s=(await sessions(page)).find(x=>x.type==='resistance');
+  expect(s.exercises[0].sets).toHaveLength(4);
+ });
+ test('rapid repeated final Save commits exactly one resistance set group',async({page})=>{
+  await fresh(page);await choose(page,'resistance','free');await addBench(page);
+  await page.locator('[data-p2-finish]').click();
+  await expect(page.locator('[data-p2-commit]')).toBeVisible();
+  await page.evaluate(()=>{
+   const button=document.querySelector('[data-p2-commit]');
+   button?.click();
+   button?.click();
+  });
+  expect((await sessions(page)).filter(s=>s.type==='resistance')).toHaveLength(1);
+  await page.reload({waitUntil:'domcontentloaded'});
+  expect((await sessions(page)).filter(s=>s.type==='resistance')[0].exercises[0].sets).toHaveLength(1);
+ });
+ test('profile switch never reveals another users in-progress workout draft',async({page})=>{
+  await fresh(page);await choose(page,'resistance','free');await addBench(page);
+  await page.locator('.bottom-nav [data-nav="profile"]').click();
+  await page.locator('[data-profile-manage-users]').click();
+  await page.locator('[data-user-new]').click();
+  await page.locator('#ls-new-profile-name').fill('P2 QA B');
+  await page.locator('[data-v14-create-user]').click();
+  await page.locator('[data-start="day"]').click();
+  await expect(page.locator('[data-p2-resume]')).toHaveCount(0);
+  expect((await sessions(page)).length).toBe(0);
+  await page.locator('.bottom-nav [data-nav="profile"]').click();
+  await page.locator('[data-profile-manage-users]').click();
+  await page.locator('.ls-user-row').filter({hasText:'P2 QA'}).first().locator('[data-user-switch]').click();
+  await page.locator('.bottom-nav [data-nav="day"]').click();
+  await expect(page.locator('[data-p2-resume]')).toBeVisible();
+  await page.locator('[data-p2-resume]').click();
+  await expect(page.locator('.ls-p2-set')).toHaveCount(1);
+ });
+ for(const storageKey of ['lastset-data-v1','lastset-user-spaces-v1']){
+  test('failed '+storageKey+' write recovers with same P2 commit ID, no duplicate sets',async({page})=>{
+   await fresh(page);await choose(page,'resistance','free');await addBench(page);
+   await page.locator('[data-p2-finish]').click();
+   await page.evaluate(k=>{
+    window.__p2OrigSet=Storage.prototype.setItem;
+    Storage.prototype.setItem=function(key,value){
+      if(key===k)throw new DOMException('Simulated storage failure','QuotaExceededError');
+      return window.__p2OrigSet.call(this,key,value);
+    };
+   },storageKey);
+   await page.locator('[data-p2-commit]').click();
+   await expect(page.locator('#ls-save-failure')).toBeVisible();
+   await expect(page.locator('[data-p2-commit]')).toBeVisible();
+   await page.evaluate(()=>{Storage.prototype.setItem=window.__p2OrigSet;});
+   await page.locator('[data-storage-retry]').click();
+   await expect(page.locator('#ls-save-failure')).toHaveCount(0);
+   await page.reload({waitUntil:'domcontentloaded'});
+   const workouts=(await sessions(page)).filter(x=>x.type==='resistance');
+   expect(workouts).toHaveLength(1);
+   expect(workouts[0].exercises[0].sets).toHaveLength(1);
+  });
+ }
+});
