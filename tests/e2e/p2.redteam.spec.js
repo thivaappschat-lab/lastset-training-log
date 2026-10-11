@@ -137,6 +137,44 @@ test.describe('P2 red team routing and mode matrix',()=>{
  });
 });
 
+test.describe('P2 profile switch and legacy draft trust',()=>{
+ test('@critical switching active profiles cannot persist an old draft into a different user space',async({page})=>{
+  await fresh(page);await start(page,'resistance','free');await bench(page);
+  const first=await draft(page,'resistance');
+  await page.locator('.bottom-nav [data-nav="profile"]').click();
+  await page.locator('[data-profile-manage-users]').click();
+  await page.locator('[data-user-new]').click();
+  await page.locator('#ls-new-profile-name').fill('Independent P2 Tester');
+  await page.locator('[data-v14-create-user]').click();
+  await page.locator('[data-start="day"]').click();
+  await expect(page.locator('[data-p2-resume]')).toHaveCount(0);
+  const second=await page.evaluate(()=>JSON.parse(localStorage.getItem('lastset-data-v1')).profile.userId);
+  await start(page,'cardio','free');
+  const cross=await page.evaluate(id=>{
+    const prefix='lastset-p2-active-v1:'+String(id).replace(/[^a-z0-9_-]/ig,'_').slice(0,80);
+    return localStorage.getItem(prefix+':resistance');
+  },second);
+  expect(cross).toBeNull();
+  await page.locator('.bottom-nav [data-nav="profile"]').click();
+  await page.locator('[data-profile-manage-users]').click();
+  await page.locator('.ls-user-row').filter({hasText:'P2 Breaker'}).first().locator('[data-user-switch]').click();
+  await today(page);
+  expect((await draft(page,'resistance'))?.id).toBe(first.id);
+  expect((await draft(page,'resistance')).exercises[0].sets).toHaveLength(1);
+ });
+ test('corrupt current draft slot cannot mask a valid legacy recovery slot',async({page})=>{
+  await fresh(page);await start(page,'resistance','free');await bench(page);
+  const old=await draft(page,'resistance');
+  await page.evaluate(()=>{
+   const key=Object.keys(localStorage).find(k=>k.includes('lastset-p2-active-v1:')&&k.endsWith(':resistance'));
+   localStorage.setItem(key.slice(0,-':resistance'.length),localStorage.getItem(key));
+   localStorage.setItem(key,'{broken-json');
+  });
+  await page.reload({waitUntil:'domcontentloaded'});
+  expect((await draft(page,'resistance'))?.id).toBe(old.id);
+ });
+});
+
 test.describe('P2 red team validation and data trust',()=>{
  const loads=[
   ['zero','0','8',true],['decimal','12.5','8',true],['heavy','1000','1',true],
