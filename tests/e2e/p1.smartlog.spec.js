@@ -1,4 +1,9 @@
 const {test,expect}=require('@playwright/test');
+async function openSmartQuick(page){
+  await page.locator('[data-p2-entry="smart"]').click();
+  await page.locator('[data-p2-mode="quick"]').click();
+  await page.locator('[data-p2-blank]').click();
+}
 const KEY='lastset-data-v1';
 async function start(page){
   await page.goto('/',{waitUntil:'domcontentloaded'});
@@ -10,7 +15,7 @@ async function start(page){
   await expect(page.locator('.ls-onboard-finish')).toBeVisible();
   await page.locator('[data-start="day"]').click();
   await expect(page.locator('.bottom-nav')).toBeVisible();
-  await page.locator('[data-day-action="describe"]').first().click();
+  await openSmartQuick(page);
   await expect(page.locator('#ai-text')).toBeVisible();
 }
 async function parse(page,phrase){
@@ -37,7 +42,7 @@ test.describe('P1 progressive Smart Log end-to-end',()=>{
     await page.reload({waitUntil:'domcontentloaded'});
     await expect(page.locator('.bottom-nav')).toBeVisible();
     await page.locator('[data-nav="day"]').click();
-    await page.locator('[data-day-action="describe"]').first().click();
+    await openSmartQuick(page);
     await page.locator('#ai-text').fill('bench press same as last time');
     await page.locator('[data-action="parse-ai"]').click();
     await expect(page.locator('.ls-memory-used')).toBeVisible();
@@ -258,7 +263,7 @@ test.describe('Mobile Scan Fix Save additions',()=>{
     await expect(page.locator('.ls-mobile-exercise')).toHaveCount(1);
     await page.reload({waitUntil:'domcontentloaded'});
     await page.locator('[data-nav="day"]').click();
-    await page.locator('[data-day-action="describe"]').first().click();
+    await openSmartQuick(page);
     await expect(page.locator('[data-mobile-resume]')).toBeVisible();
     await page.locator('[data-mobile-resume]').click();
     await expect(page.locator('.ls-mobile-review')).toBeVisible();
@@ -510,7 +515,7 @@ test.describe('0.16.5 — tap exercise, edit sets, opt-in learn',()=>{
     },KEY);
     await page.reload({waitUntil:'domcontentloaded'});
     await page.locator('.bottom-nav [data-nav="day"]').click();
-    await page.locator('[data-day-action="describe"]').first().click();
+    await openSmartQuick(page);
   }
   test('history suggestion never triggers old conversation editor; tap Dip and apply all 3×7 directly',async({page})=>{
     await start(page);
@@ -559,7 +564,7 @@ test.describe('0.16.5 — tap exercise, edit sets, opt-in learn',()=>{
     expect(sets).toEqual([[[80,8],[85,6],[85,5]],[[50,7],[50,7],[50,7]]]);
     await page.reload({waitUntil:'domcontentloaded'});
     await page.locator('.bottom-nav [data-nav="day"]').click();
-    await page.locator('[data-day-action="describe"]').first().click();
+    await openSmartQuick(page);
     await page.locator('[data-mobile-resume]').click();
     expect(await page.evaluate(()=>state.aiParsed.items.map(x=>x.sets.map(s=>[s.weightKg,s.reps])))).toEqual(sets);
     expect(resistance(await records(page))).toBeUndefined();
@@ -684,8 +689,8 @@ test.describe('P1 save confirmation dismissal and follow-through',()=>{
     await expect(page.locator('.ls-mobile-success')).toBeVisible();
     await page.locator('[data-mobile-today]').click();
     await expect(page.locator('.ls-mobile-success')).toHaveCount(0);
-    await expect(page.locator('[data-day-action="describe"]').first()).toBeVisible();
-    await page.locator('[data-day-action="describe"]').first().click();
+    await expect(page.locator('[data-p2-entry="smart"]')).toBeVisible();
+    await openSmartQuick(page);
     await expect(page.locator('#ai-text')).toBeVisible();
     await expect(page.locator('.ls-mobile-success')).toHaveCount(0);
     expect(resistance(await records(page)).exercises.map(x=>x.sets.map(s=>[s.weight,s.reps]))).toEqual(expected);
