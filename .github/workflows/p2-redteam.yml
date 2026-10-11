@@ -4,6 +4,7 @@ on:
     branches: [p2-redteam-20261012]
     paths:
       - 'tests/e2e/p2.redteam.spec.js'
+      - 'tests/e2e/p2.extended.spec.js'
       - 'tests/e2e/p2.logging.spec.js'
       - 'lastset-p2.js'
       - 'lastset-p2.css'
@@ -41,7 +42,7 @@ jobs:
           cat /tmp/lastset-redteam.log
           exit 1
       - name: P2 red team and existing regression suite
-        run: npx playwright test tests/e2e/p2.logging.spec.js tests/e2e/p2.redteam.spec.js --project=${{ matrix.browser }} --retries=0 --timeout=40000
+        run: npx playwright test tests/e2e/p2.logging.spec.js tests/e2e/p2.redteam.spec.js tests/e2e/p2.extended.spec.js --project=${{ matrix.browser }} --retries=0 --timeout=40000
       - uses: actions/upload-artifact@v4
         if: always()
         with:

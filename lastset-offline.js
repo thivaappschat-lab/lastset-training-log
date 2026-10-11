@@ -97,7 +97,9 @@
   }
 
   async function prepareOffline(){
-    if(!('serviceWorker'in navigator)||location.protocol!=='https:')return false;
+    // Loopback HTTP is a secure context under browser rules; allow isolated offline QA.
+    // Ordinary insecure HTTP remains excluded, while production continues on HTTPS.
+    if(!('serviceWorker'in navigator)||!window.isSecureContext)return false;
     try{
       const reg=await navigator.serviceWorker.register('./service-worker.js',{updateViaCache:'none'});
       activeRegistration=reg;
