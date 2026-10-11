@@ -361,11 +361,21 @@ test.describe('P1 transactional save under storage failures',()=>{
         };
       },key);
       await page.locator('[data-action="confirm-ai-workout"]').click();
+      const recoveryState=await page.evaluate(()=>({
+        alert:!!document.getElementById('ls-save-failure'),
+        success:!!document.querySelector('.ls-mobile-success'),
+        parsed:!!state.aiParsed?.items?.length,
+        view:state.view,
+        local:localStorage.getItem('lastset-data-v1')?.length||0,
+        registered:localStorage.getItem('lastset-user-spaces-v1')?.length||0,
+      }));
+      console.log('P1 storage failure diagnostics',key,JSON.stringify(recoveryState));
       await expect(page.locator('#ls-save-failure')).toBeVisible();
+      await expect(page.locator('[data-storage-retry]')).toBeVisible();
       await expect(page.locator('.ls-mobile-success')).toHaveCount(0);
       await expect(page.locator('.ls-mobile-review')).toBeVisible();
       await page.evaluate(()=>{Storage.prototype.setItem=window.__p1OriginalStorageSet;});
-      await page.locator('[data-action="confirm-ai-workout"]').click();
+      await page.locator('[data-storage-retry]').click();
       await expect(page.locator('.ls-mobile-success')).toBeVisible();
       await dismiss(page);
       const latest=await todayRes(page);
