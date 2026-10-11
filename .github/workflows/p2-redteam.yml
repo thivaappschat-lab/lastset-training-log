@@ -1,0 +1,53 @@
+name: LastSet P2 Red Team Nightly Gate
+on:
+  push:
+    branches: [p2-redteam-20261012]
+    paths:
+      - 'tests/e2e/p2.redteam.spec.js'
+      - 'tests/e2e/p2.logging.spec.js'
+      - 'lastset-p2.js'
+      - 'lastset-p2.css'
+      - 'lastset-navigation.js'
+      - '.github/workflows/p2-redteam.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: p2-redteam-${{ github.ref }}-${{ matrix.browser }}
+  cancel-in-progress: true
+jobs:
+  red-team:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [mobile-chromium, mobile-webkit]
+    env:
+      CI: 'true'
+      LASTSET_BASE_URL: http://127.0.0.1:4173/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium webkit
+      - run: bash build-cloudflare.sh
+      - name: Serve isolated candidate
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory dist >/tmp/lastset-redteam.log 2>&1 &
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:4173/ | grep -q lastset-release && exit 0; sleep 1; done
+          cat /tmp/lastset-redteam.log
+          exit 1
+      - name: P2 red team and existing regression suite
+        run: npx playwright test tests/e2e/p2.logging.spec.js tests/e2e/p2.redteam.spec.js --project=${{ matrix.browser }} --retries=0 --timeout=40000
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: p2-redteam-evidence-${{ matrix.browser }}
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
