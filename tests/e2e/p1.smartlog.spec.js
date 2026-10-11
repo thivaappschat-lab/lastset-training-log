@@ -303,3 +303,87 @@ test('mobile review stays compact until a confirmed exercise is expanded',async(
   await expect(page.locator('[data-p1-weight="0:0"]')).toHaveCount(0);
   await expect(page.locator('[data-p1-weight="1:0"]')).toHaveValue('80');
 });
+
+
+/* SpeechRecognition is mocked because CI browsers do not have a real mic.
+   These tests cover the UI/controller logic, not iPhone hardware accuracy. */
+async function startWithVoice(page){
+  await page.addInitScript(()=>{
+    class FakeSpeechRecognition{
+      constructor(){this.lang='en-US';this.interimResults=false;this.continuous=false;}
+      start(){
+        window.__lastsetVoiceMock.instances.push(this);
+        window.__lastsetVoiceMock.starts++;
+      }
+      stop(){this.onend?.({});}
+      abort(){this.aborted=true;}
+    }
+    window.__lastsetVoiceMock={
+      instances:[],starts:0,
+      current(){return this.instances[this.instances.length-1];},
+      say(text,isFinal=true){
+        const result={0:{transcript:text},length:1,isFinal};
+        this.current().onresult?.({results:[result],resultIndex:0});
+      },
+      end(){this.current().onend?.({});}
+    };
+    window.SpeechRecognition=FakeSpeechRecognition;
+    window.webkitSpeechRecognition=FakeSpeechRecognition;
+  });
+  await start(page);
+  await expect(page.locator('[data-action="voice-demo"]')).toBeEnabled();
+}
+test.describe('Round 4 voice interaction with mocked microphone',()=>{
+  test('continuous mode continues past 15 seconds without auto submitting',async({page})=>{
+    await startWithVoice(page);
+    await page.clock.install();
+    await page.locator('[data-action="voice-demo"]').click();
+    await expect(page.locator('.ls-v14-voice')).toBeVisible();
+    const flags=await page.evaluate(()=>({continuous:__lastsetVoiceMock.current().continuous,interim:__lastsetVoiceMock.current().interimResults}));
+    expect(flags).toEqual({continuous:true,interim:true});
+    await page.evaluate(()=>__lastsetVoiceMock.say('Deadlift 140x5 then 150x3 then 160x1.'));
+    await page.clock.fastForward(16000);
+    await expect(page.locator('[data-voice-heading]')).toContainText('Listening');
+    await expect(page.locator('.ls-v14-voice')).toBeVisible();
+    expect(resistance(await records(page))).toBeUndefined();
+    await page.locator('[data-voice-done]').click();
+    await expect(page.locator('.ls-mobile-review')).toBeVisible();
+    await expect(page.locator('.ls-v14-voice')).toHaveCount(0);
+    expect(await page.evaluate(()=>state.aiParsed.items[0].sets.map(s=>[s.weightKg,s.reps])))
+      .toEqual([[140,5],[150,3],[160,1]]);
+  });
+  test('browser early onend pauses and Continue appends without losing earlier speech',async({page})=>{
+    await startWithVoice(page);
+    await page.locator('[data-action="voice-demo"]').click();
+    await page.evaluate(()=>{
+      __lastsetVoiceMock.say('Deadlift 140x5 then 150x3 then 160x1.');
+      __lastsetVoiceMock.end();
+    });
+    await expect(page.locator('[data-voice-heading]')).toContainText('paused');
+    await expect(page.locator('[data-voice-continue]')).toBeVisible();
+    await expect(page.locator('.ls-v14-voice')).toBeVisible();
+    expect(resistance(await records(page))).toBeUndefined();
+    await page.locator('[data-voice-continue]').click();
+    expect(await page.evaluate(()=>__lastsetVoiceMock.starts)).toBe(2);
+    await page.evaluate(()=>__lastsetVoiceMock.say('Bench press 80x8 then 85x6.'));
+    await page.locator('[data-voice-done]').click();
+    await expect(page.locator('.ls-mobile-review')).toBeVisible();
+    const text=await page.evaluate(()=>state.aiDraft);
+    expect(text.match(/Deadlift/g)).toHaveLength(1);
+    expect(text.match(/Bench press/g)).toHaveLength(1);
+    const sets=await page.evaluate(()=>state.aiParsed.items.filter(i=>i.kind==='resistance').map(i=>i.sets.map(s=>[s.weightKg,s.reps])));
+    expect(sets).toEqual([[[140,5],[150,3],[160,1]],[[80,8],[85,6]]]);
+    expect(resistance(await records(page))).toBeUndefined();
+  });
+  test('voice Cancel keeps existing draft and never commits a workout',async({page})=>{
+    await startWithVoice(page);
+    await page.locator('#ai-text').fill('Existing note');
+    await page.locator('[data-action="voice-demo"]').click();
+    await page.evaluate(()=>__lastsetVoiceMock.say('Deadlift 140x5'));
+    await expect(page.locator('[data-voice-text]')).toContainText('Deadlift');
+    await page.locator('[data-voice-cancel]').click();
+    await expect(page.locator('.ls-v14-voice')).toHaveCount(0);
+    expect(await page.evaluate(()=>state.aiDraft)).toBe('Existing note');
+    expect(resistance(await records(page))).toBeUndefined();
+  });
+});
