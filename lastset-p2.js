@@ -3,7 +3,7 @@
 (()=>{
 'use strict';
 if(typeof state==='undefined'||typeof data==='undefined'||typeof saveData!=='function')return;
-const V='0.20.1', PREFIX='lastset-p2-active-v1:', clone=x=>JSON.parse(JSON.stringify(x));
+const V='0.20.2', PREFIX='lastset-p2-active-v1:', clone=x=>JSON.parse(JSON.stringify(x));
 const esc=v=>typeof escapeHtml==='function'?escapeHtml(String(v??'')):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const catNames={resistance:'Resistance',cardio:'Cardio',mobility:'Mobility & Recovery',smart:'Smart Log'};
 const modes={quick:['Log & Finish','Enter completed training and save'],free:['Log As I Go','Log without a timer'],timed:['Log With Timer','Optional rest countdown or stopwatch']};
@@ -15,11 +15,28 @@ function oldKey(){return PREFIX+identity().replace(/[^a-z0-9_-]/ig,'_').slice(0,
 function key(cat=category){return oldKey()+':'+cat;}
 function cleanDate(){return /^\d{4}-\d\d-\d\d$/.test(state.selectedDate)?state.selectedDate:isoDate(new Date());}
 function valid(d,c){return d&&d.version===1&&d.userId===identity()&&d.category===c&&d.status==='active';}
-function loadDraft(c=category){try{const d=JSON.parse(localStorage.getItem(key(c))||'null');if(valid(d,c))return d;const previous=JSON.parse(localStorage.getItem(oldKey())||'null');return valid(previous,c)?previous:null;}catch(_){return null;}}
+function loadDraft(c=category){
+  // A corrupt new slot must not suppress a separately recoverable legacy draft.
+  try{const item=JSON.parse(localStorage.getItem(key(c))||'null');if(valid(item,c))return item;}catch(_){}
+  try{const legacy=JSON.parse(localStorage.getItem(oldKey())||'null');return valid(legacy,c)?legacy:null;}catch(_){return null;}
+}
 function allDrafts(){return Object.keys(catNames).map(c=>loadDraft(c)).filter(Boolean);}
 function active(){if(draft&&(draft.userId!==identity()||draft.category!==category))draft=null;return draft||(draft=loadDraft());}
-function persist(){if(!draft||draft.category!==category)return false;try{const raw=JSON.stringify(draft),k=key(draft.category);localStorage.setItem(k,raw);if(localStorage.getItem(k)!==raw)throw Error('Draft verification failed');failure=false;return true;}catch(e){failure=true;message='Draft was not saved to device. Keep LastSet open, retry storage, or export a backup before leaving.';return false;}}
-function clear(){const cat=draft?.category||category;try{localStorage.removeItem(key(cat));const old=JSON.parse(localStorage.getItem(oldKey())||'null');if(valid(old,cat))localStorage.removeItem(oldKey());}catch(_){}draft=null;failure=false;}
+function persist(){
+  if(!draft)return false;
+  // A user switch can occur while this module still holds the previous user's
+  // draft in memory. Never write it under the currently selected user's key.
+  if(draft.userId!==identity()){draft=null;failure=false;return true;}
+  if(draft.category!==category)return false;
+  try{const raw=JSON.stringify(draft),k=key(draft.category);localStorage.setItem(k,raw);if(localStorage.getItem(k)!==raw)throw Error('Draft verification failed');failure=false;return true;}
+  catch(e){failure=true;message='Draft was not saved to device. Keep LastSet open, retry storage, or export a backup before leaving.';return false;}
+}
+function clear(){
+  if(draft&&draft.userId!==identity()){draft=null;failure=false;return;}
+  const cat=draft?.category||category;
+  try{localStorage.removeItem(key(cat));const old=JSON.parse(localStorage.getItem(oldKey())||'null');if(valid(old,cat))localStorage.removeItem(oldKey());}catch(_){}
+  draft=null;failure=false;
+}
 function begin(source){
   const userId=String(data?.profile?.userId||'unregistered');
   draft={version:1,id:cryptoId(),userId,date:cleanDate(),category,mode,status:'active',
