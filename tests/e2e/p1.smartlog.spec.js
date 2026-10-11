@@ -599,3 +599,55 @@ test.describe('0.16.5 — tap exercise, edit sets, opt-in learn',()=>{
     await expect(page.locator('[data-action="confirm-ai-workout"]')).toHaveCount(0);
   });
 });
+
+
+test.describe('iPhone microphone permissions — deny and recover',()=>{
+  test('denied microphone does not leave a dead-end: retry starts a new recognition session',async({page})=>{
+    await startWithVoice(page);
+    await page.locator('[data-action="voice-demo"]').click();
+    await page.evaluate(()=>{
+      const mic=__lastsetVoiceMock.current();
+      mic.onerror?.({error:'not-allowed'});
+      mic.onend?.({});
+    });
+    await expect(page.locator('[data-voice-heading]')).toContainText('Microphone access blocked');
+    await expect(page.locator('[data-voice-permission-help]')).toBeVisible();
+    await expect(page.locator('[data-voice-settings-guide]')).toContainText('Website Settings');
+    await expect(page.locator('[data-voice-retry]')).toBeVisible();
+    await expect(page.locator('[data-voice-type]')).toBeVisible();
+    await expect(page.locator('[data-voice-done]')).toBeHidden();
+    expect(await page.evaluate(()=>__lastsetVoiceMock.starts)).toBe(1);
+    await page.locator('[data-voice-retry]').click();
+    await expect(page.locator('[data-voice-heading]')).toContainText('Listening');
+    expect(await page.evaluate(()=>__lastsetVoiceMock.starts)).toBe(2);
+    await page.evaluate(()=>__lastsetVoiceMock.say('Bench Press 50 kg 3 reps 4 sets.'));
+    await page.locator('[data-voice-done]').click();
+    await expect(page.locator('.ls-mobile-review')).toBeVisible();
+    await expect(page.locator('.ls-mobile-status')).toContainText('1 exercises · 4 sets');
+    expect(resistance(await records(page))).toBeUndefined();
+  });
+  test('repeated rejection keeps settings guide available and preserves typed draft',async({page})=>{
+    await startWithVoice(page);
+    await page.locator('#ai-text').fill('Bench press 50kg 3 reps 4 sets.');
+    await page.locator('[data-action="voice-demo"]').click();
+    await page.evaluate(()=>__lastsetVoiceMock.current().onerror?.({error:'not-allowed'}));
+    await page.locator('[data-voice-retry]').click();
+    await page.evaluate(()=>__lastsetVoiceMock.current().onerror?.({error:'service-not-allowed'}));
+    await expect(page.locator('[data-voice-retry]')).toBeVisible();
+    await expect(page.locator('[data-voice-permission-help]')).toBeVisible();
+    await page.locator('[data-voice-type]').click();
+    await expect(page.locator('.ls-v14-voice')).toHaveCount(0);
+    await expect(page.locator('#ai-text')).toHaveValue('Bench press 50kg 3 reps 4 sets.');
+    expect(resistance(await records(page))).toBeUndefined();
+  });
+  test('installed PWA microphone denial displays installed-app privacy instructions',async({page})=>{
+    await startWithVoice(page);
+    await page.evaluate(()=>Object.defineProperty(navigator,'standalone',{value:true,configurable:true}));
+    await page.locator('[data-action="voice-demo"]').click();
+    await page.evaluate(()=>__lastsetVoiceMock.current().onerror?.({error:'not-allowed'}));
+    await expect(page.locator('[data-voice-settings-guide]')).toContainText('Installed LastSet');
+    await expect(page.locator('[data-voice-settings-guide]')).toContainText('Privacy & Security');
+    await page.locator('[data-voice-cancel]').click();
+    await expect(page.locator('.ls-v14-voice')).toHaveCount(0);
+  });
+});
