@@ -66,6 +66,47 @@ test.describe('P1 progressive Smart Log end-to-end',()=>{
     const session=resistance(await records(page));
     expect(session.exercises[0].sets.map(s=>[s.weight,s.reps])).toEqual([[60,5],[55,7]]);
   });
+  test('critical regression: ambiguous squat is visible and cannot be silently omitted',async({page})=>{
+    await start(page);
+    await parse(page,'Squat 100x5, 110x3, 120x1. Pull ups bodyweight 8,6,5 then +25 for 5. OHP 60x5 then 55 amrap.');
+    await expect(page.locator('.ls-p1-card')).toHaveCount(3);
+    await expect(page.locator('.ls-p1-set')).toHaveCount(9);
+    await expect(page.locator('[data-p1-exercise="0"]')).toBeVisible();
+    await expect(page.locator('[data-p1-weight="0:0"]')).toHaveValue('100');
+    await expect(page.locator('[data-p1-weight="0:1"]')).toHaveValue('110');
+    await expect(page.locator('[data-p1-weight="0:2"]')).toHaveValue('120');
+    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
+    await expect(page.locator('.ls-p1-review')).toContainText('3 resistance exercises detected');
+    // A user must explicitly choose the variant and confirm the source ambiguity.
+    await page.locator('[data-p1-exercise="0"]').selectOption('squat');
+    await page.locator('[data-p1-ack="0"]').check();
+    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
+    // The OHP AMRAP reps remain unknown, rather than being invented.
+    await page.locator('[data-p1-reps="2:1"]').fill('7');
+    await page.locator('[data-p1-reps="2:1"]').blur();
+    await page.locator('[data-p1-ack="2"]').check();
+    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeEnabled();
+    await page.locator('[data-action="confirm-ai-workout"]').click();
+    const before=resistance(await records(page));
+    expect(before.exercises.map(x=>x.exerciseId)).toEqual(['squat','pull-up','barbell-overhead-press']);
+    expect(before.exercises.map(x=>x.sets.map(y=>[y.weight,y.reps]))).toEqual([
+      [[100,5],[110,3],[120,1]],
+      [[0,8],[0,6],[0,5],[25,5]],
+      [[60,5],[55,7]]
+    ]);
+    await page.reload({waitUntil:'domcontentloaded'});
+    await expect(page.locator('.bottom-nav')).toBeVisible();
+    const after=resistance(await records(page));
+    expect(after.exercises).toEqual(before.exercises);
+  });
+  test('unrecognised full exercise sentence is visible and cannot be confirmed silently',async({page})=>{
+    await start(page);
+    await parse(page,'Mystery lifter move 50x8. Bench press 80x8 then 85x6');
+    await expect(page.locator('.ls-p1-review')).toContainText('2 resistance exercises detected');
+    await expect(page.locator('[data-p1-exercise="0"]')).toBeVisible();
+    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeDisabled();
+    expect(resistance(await records(page))).toBeUndefined();
+  });
   test('squat and deadlift each retain every progressive load and rep',async({page})=>{
     await start(page);
     await parse(page,'Back squat 100x5, 110x3, 120x1. Deadlift 140x5 then 150x3 then 160x1');

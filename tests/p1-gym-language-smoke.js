@@ -51,4 +51,30 @@ pending.items[0].p1Warnings=['Please review dropset weight'];
 assert.equal(P.validateReview(pending).ok,false,'unacknowledged warnings block save');
 pending.items[0].p1Acknowledged=true;
 assert.equal(P.validateReview(pending).ok,true);
+
+// Regression: a plain squat is intentionally ambiguous, but it cannot vanish
+// because recognised pull-ups and OHP occur later in the same description.
+const report='Squat 100x5, 110x3, 120x1. Pull ups bodyweight 8,6,5 then +25 for 5. OHP 60x5 then 55 amrap.';
+const mentions=[
+  {start:report.indexOf('Pull ups'),end:report.indexOf('Pull ups')+8},
+  {start:report.indexOf('OHP'),end:report.indexOf('OHP')+3}
+];
+const omitted=P.findUnaccountedExerciseSegments(report,mentions,'kg');
+assert.equal(omitted.length,1,'One unresolved squat must be presented even alongside recognised exercises');
+assert.equal(omitted[0].ambiguity,'squat');
+assert.deepStrictEqual(omitted[0].sets.map(x=>[x.weightKg,x.reps]),[[100,5],[110,3],[120,1]]);
+const missing={items:[{kind:'resistance',name:'Squat — choose variation',exerciseId:null,sets:omitted[0].sets,p1Review:true}]};
+assert.equal(P.validateReview(missing).ok,false,'unidentified exercises must block save');
+const unidentified=P.findUnaccountedExerciseSegments('Unlisted lift 50x10. Bench press 80x8',[
+  {start:'Unlisted lift 50x10. '.length,end:'Unlisted lift 50x10. '.length+11}
+],'kg');
+assert.equal(unidentified.length,1,'Unrecognised entire exercise sentence must not be silently omitted');
+assert.equal(unidentified[0].ambiguity,'unidentified');
+assert.equal(P.findUnaccountedExerciseSegments('Back Squat 100x5',[
+  {start:0,end:10}
+],'kg').length,0,'Explicit known squat must not create duplicates');
+assert.equal(P.findUnaccountedExerciseSegments('Bench press 80kg for 8, then 85kg for 6 and 5.',[
+  {start:0,end:11}
+],'kg').length,0,'Progressive sets for a known exercise must not create false omissions');
+
 console.log('LastSet P1 living gym-language corpus passed:',rows.length,'scenarios plus progressive, units and review guards');

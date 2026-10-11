@@ -95,7 +95,51 @@ function parseProgressivePhrase(text,loadType='external',defaultUnit='kg'){
 
   return warnings.length?{sets:[],warnings,recognized:false}:null;
 }
+// Independent source inventory: recognised and ambiguous exercises must all
+// appear in the review, even when older parser layers omit them.
+function findUnaccountedExerciseSegments(source,mentions,defaultUnit='kg'){
+  const text=safe(source),ordered=(mentions||[]).slice().sort((a,b)=>a.start-b.start);
+  const unaccounted=[];
+  const intersects=(start,end)=>ordered.some(m=>m.start<end&&m.end>start);
+  const endsAt=pos=>{
+    const next=ordered.find(m=>m.start>pos)?.start??text.length;
+    const punctuation=text.slice(pos,next).search(/[.;\n](?=\s*[A-Za-z])/);
+    return punctuation>=0?Math.min(next,pos+punctuation):next;
+  };
+  for(const hit of text.matchAll(/\bsquats?\b/gi)){
+    const start=hit.index,end=start+hit[0].length;
+    if(intersects(start,end))continue; // Explicit goblet/front/etc. already recognised.
+    const before=text.slice(Math.max(0,start-24),start);
+    if(/\b(?:barbell|back|front|bodyweight|body\s*weight|air|hack|goblet|smith)\s*$/i.test(before))continue;
+    const segment=text.slice(start,endsAt(end)).trim();
+    const parsed=parseProgressivePhrase(segment,'external',defaultUnit);
+    unaccounted.push({
+      start,source:segment,ambiguity:'squat',
+      sets:parsed?.sets||[],
+      warnings:['Squat type was not specified. Choose the exercise before saving.']
+    });
+  }
+  // Detect an entire unrecognised sentence with lifting numbers. Do not
+  // hallucinate an exercise name. Force an explicit user correction instead.
+  const clauses=[...text.matchAll(/(?:^|[.;\n])\s*([^.;\n]+)/g)];
+  for(const match of clauses){
+    const content=match[1],start=match.index+match[0].indexOf(content),end=start+content.length;
+    if(intersects(start,end)||unaccounted.some(x=>x.start>=start&&x.start<end))continue;
+    if(!/\b(?:\d+(?:\.\d+)?\s*(?:kg|lb|x|×|for\b)|\d+\s+sets?\b)/i.test(content))continue;
+    const firstNumber=content.search(/\d/),lead=firstNumber>=0?content.slice(0,firstNumber).trim():'';
+    if(!/[a-z]{3}/i.test(lead)||/^(?:(?:then|and|for|reps|sets?|drop|to|at|with)\s*)+$/i.test(lead))continue;
+    const parsed=parseProgressivePhrase(content,'external',defaultUnit);
+    unaccounted.push({
+      start,source:content.trim(),ambiguity:'unidentified',
+      sets:parsed?.sets||[],
+      warnings:['An exercise in this part of your description was not identified. Correct the description before saving.']
+    });
+  }
+  return unaccounted.sort((a,b)=>a.start-b.start);
+}
+
 function validateReview(parsed){
+  if(parsed?.p1AuditError)return {ok:false,why:'Exercise detection could not be verified. Edit the description and try again.'};
   if(!Array.isArray(parsed?.items)||!parsed.items.length)return {ok:false,why:'No activities detected'};
   for(const item of parsed.items){
     if(item.kind!=='resistance')continue;
@@ -115,7 +159,7 @@ function validateReview(parsed){
   return {ok:true,why:''};
 }
 if(typeof globalThis!=='undefined'&&globalThis.__LASTSET_TEST_ONLY__){
-  globalThis.LastSetSmartLogP1Test={parseProgressivePhrase,reviewWarnings,validateReview};
+  globalThis.LastSetSmartLogP1Test={parseProgressivePhrase,reviewWarnings,validateReview,findUnaccountedExerciseSegments};
   return;
 }
 if(typeof window==='undefined'||typeof parseSmartWorkout!=='function')return;
@@ -135,10 +179,24 @@ parseSmartWorkout=function(text){
       const start=i===0&&/^\s*warm(?:\s|-)?up\s*$/i.test(lead)?0:m.start;
       const segment=source.slice(start,i+1<mentions.length?mentions[i+1].start:source.length);
       const index=result.items.findIndex((item,k)=>!used.has(k)&&item.kind==='resistance'&&item.exerciseId===m.exercise?.id);
-      if(index<0)continue;
+      const parsed=parseProgressivePhrase(segment,m.exercise?.loadType||'external',unit);
+      if(index<0){
+        // Recognised exercise missing from the previous parsing layer.
+        // Restore it to the review instead of silently dropping it.
+        const item={
+          kind:'resistance',exerciseId:m.exercise?.id||null,name:m.exercise?.name||'Unidentified exercise',
+          equipment:m.exercise?.equipment||'',loadType:m.exercise?.loadType||'external',
+          primaryMuscles:m.exercise?.muscles||[],sets:parsed?.sets||[],
+          p1Review:true,p1Source:segment.trim(),p1SourceStart:m.start,
+          p1Warnings:['This exercise was absent from the initial parse. Verify every set.'],
+          p1Acknowledged:false,notes:'Original Smart Log: '+segment.trim()
+        };
+        result.items.push(item);
+        continue;
+      }
       used.add(index);
       const item=result.items[index];
-      const parsed=parseProgressivePhrase(segment,item.loadType,unit);
+      item.p1SourceStart=m.start;
       if(!parsed)continue;
       if(parsed.sets.length)item.sets=parsed.sets;
       item.p1Review=true;
@@ -147,7 +205,30 @@ parseSmartWorkout=function(text){
       item.p1Acknowledged=false;
       item.notes=[item.notes,'Original Smart Log: '+item.p1Source].filter(Boolean).join(' · ');
     }
-  }catch(err){console.warn('Smart Log P1 review could not normalize the phrase',err);}
+    for(const missing of findUnaccountedExerciseSegments(source,mentions,unit)){
+      result.items.push({
+        kind:'resistance',exerciseId:null,
+        name:missing.ambiguity==='squat'?'Squat — choose variation':'Unidentified exercise',
+        equipment:'',primaryMuscles:[],loadType:'external',
+        sets:missing.sets,p1Review:true,p1Source:missing.source,p1SourceStart:missing.start,
+        p1Warnings:missing.warnings,p1Acknowledged:false,
+        ambiguity:missing.ambiguity,notes:'Original Smart Log: '+missing.source
+      });
+    }
+    // Put the unresolved source segment back where it appeared in the text.
+    // Never move cardio records into resistance or drop original items.
+    result.items.sort((a,b)=>(a.p1SourceStart??Number.MAX_SAFE_INTEGER)-(b.p1SourceStart??Number.MAX_SAFE_INTEGER));
+    result.p1DetectedExerciseCount=result.items.filter(item=>item.kind==='resistance').length;
+    if(result.items.some(item=>item.kind==='resistance'&&!item.exerciseId)){
+      result.confidence=Math.min(Number(result.confidence)||0.5,0.54);
+      result.needsConfirmation=true;
+      result.clarification='An exercise requires identification before this workout can be saved.';
+    }
+  }catch(err){
+    console.warn('Smart Log P1 exercise inventory failed safely',err);
+    result.p1AuditError=true;
+    result.items.push({kind:'resistance',exerciseId:null,name:'Exercise verification needed',sets:[],p1Review:true,p1Warnings:['Cannot verify exercise coverage. Edit the original description before saving.'],p1Acknowledged:false,p1Source:source});
+  }
   return result;
 };
 const escape=s=>typeof escapeHtml==='function'?escapeHtml(s):safe(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
@@ -158,7 +239,9 @@ aiParsedHtml=function(parsed){
   const cards=parsed.items.map((item,ii)=>{
     if(item.kind!=='resistance')return aiActivityHtml(item,ii);
     const marked=item.p1Warnings||[],type=item.loadType||'external';
-    const heading='<div class="ai-activity-head"><div><strong>'+escape(item.name)+'</strong><small>'+escape(item.p1Source||'Review all recorded sets')+'</small></div></div>';
+    const choices=!item.exerciseId?(typeof EXERCISES!=='undefined'?EXERCISES.filter(ex=>item.ambiguity==='squat'?/squat/i.test(ex.name):true).slice().sort((a,b)=>a.name.localeCompare(b.name)):[]):[];
+    const chooser=!item.exerciseId?'<label style="display:block;margin:10px 0;font-size:12px;font-weight:700">Exercise identification required<select data-p1-exercise="'+ii+'" style="display:block;width:100%;margin-top:6px;padding:10px" aria-label="Choose exercise for '+escape(item.p1Source||item.name)+'"><option value="">Choose the correct exercise</option>'+choices.map(ex=>'<option value="'+escape(ex.id)+'">'+escape(ex.name)+'</option>').join('')+'</select></label>':'';
+    const heading='<div class="ai-activity-head"><div><strong>'+escape(item.name)+'</strong><small>'+escape(item.p1Source||'Review all recorded sets')+'</small></div></div>'+chooser;
     const rows=(item.sets||[]).map((s,j)=>{
       const w=s.weightKg==null?'':s.weightKg,r=s.reps==null?'':s.reps;
       const fields=type==='timed'?'<label>Seconds<input data-p1-seconds="'+ii+':'+j+'" inputmode="numeric" type="number" min="1" value="'+escape(s.durationSeconds??'')+'"></label>'
@@ -166,9 +249,12 @@ aiParsedHtml=function(parsed){
       return '<div class="ls-p1-set"><span>Set '+(j+1)+'</span>'+fields+'<label>Type<select data-p1-type="'+ii+':'+j+'"><option value="working" '+(s.setType!=='warmup'?'selected':'')+'>Working</option><option value="warmup" '+(s.setType==='warmup'?'selected':'')+'>Warm-up</option></select></label><button type="button" data-p1-remove="'+ii+':'+j+'" aria-label="Remove set '+(j+1)+'">×</button></div>';
     }).join('');
     const warn=marked.length?'<div class="ai-clarify"><strong>Review before saving</strong><div>'+marked.map(w=>escape(w)).join(' · ')+'</div><label class="ls-p1-ack"><input type="checkbox" data-p1-ack="'+ii+'" '+(item.p1Acknowledged?'checked':'')+'> I reviewed these details; keep the original wording in notes</label></div>':'';
-    return '<section class="ai-activity ls-p1-card" data-p1-exercise="'+ii+'">'+heading+rows+'<button class="secondary ls-p1-add" type="button" data-p1-add="'+ii+'">＋ Add missing set</button>'+warn+'</section>';
+    return '<section class="ai-activity ls-p1-card" data-p1-card="'+ii+'">'+heading+rows+'<button class="secondary ls-p1-add" type="button" data-p1-add="'+ii+'">＋ Add missing set</button>'+warn+'</section>';
   }).join('');
-  return '<div class="ai-result ls-p1-review"><h3>Review every set before saving</h3><p class="muted">Nothing is saved until you confirm. Correct any number or add omitted sets.</p>'+cards+
+  const exerciseCount=parsed.items.filter(item=>item.kind==='resistance').length;
+  const unrecognised=parsed.items.filter(item=>item.kind==='resistance'&&!item.exerciseId).length;
+  const status='<div class="ai-clarify" role="status"><strong>'+exerciseCount+' resistance exercise'+(exerciseCount===1?'':'s')+' detected</strong> · '+(unrecognised?unrecognised+' need exercise identification before saving':'All detected exercises are identified')+'</div>';
+  return '<div class="ai-result ls-p1-review"><h3>Review every set before saving</h3><p class="muted">Nothing is saved until you confirm. Correct any number or add omitted sets.</p>'+status+cards+
     (!result.ok?'<div class="ai-clarify" role="alert">'+escape(result.why)+'</div>':'')+
     '<button class="primary" data-action="confirm-ai-workout" '+(!result.ok?'disabled':'')+'>Save reviewed workout</button>'+
     '<button class="secondary" type="button" data-p1-edit-input>Change original description</button></div>';
@@ -182,6 +268,22 @@ function parsedLocation(raw){
 }
 document.addEventListener('change',e=>{
   const t=e.target;
+  if(t?.hasAttribute?.('data-p1-exercise')){
+    const idx=Number(t.getAttribute('data-p1-exercise'));
+    const item=state?.aiParsed?.items?.[idx];
+    const exercise=typeof EXERCISES!=='undefined'?EXERCISES.find(ex=>ex.id===t.value):null;
+    if(item&&item.kind==='resistance'&&exercise){
+      item.exerciseId=exercise.id;item.name=exercise.name;
+      item.equipment=exercise.equipment;
+      item.primaryMuscles=exercise.muscles||[];
+      item.loadType=exercise.loadType||'external';
+      if(item.loadType==='bodyweight')item.sets=(item.sets||[]).map(set=>({...set,weightKg:0}));
+      item.p1Acknowledged=false;
+      delete item.ambiguity;
+      rerender();
+    }
+    return;
+  }
   for(const [attr,key] of [['data-p1-weight','weightKg'],['data-p1-reps','reps'],['data-p1-seconds','durationSeconds'],['data-p1-type','setType']]){
     if(!t?.hasAttribute?.(attr))continue;
     const entry=parsedLocation(t.getAttribute(attr));if(!entry)return;
