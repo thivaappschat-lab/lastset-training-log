@@ -199,7 +199,11 @@ function decorateToday(){
    '<div class="ls-p2-grid">'+Object.entries(catNames).map(([id,label])=>'<button data-p2-entry="'+id+'"><span class="ls-p2-grid-icon">'+({resistance:'🏋️',cardio:'🏃',mobility:'🧘',smart:'🎙️'}[id])+'</span><strong>'+esc(label)+'</strong><small>'+({resistance:'Weights, reps and sets',cardio:'Running, cycling and more',mobility:'Yoga, stretching and recovery',smart:'Type or speak your workout'}[id])+'</small></button>').join('')+'</div>'+
    (active()?'<div class="ls-p2-resume"><strong>Unfinished '+esc(catNames[active().category])+' workout</strong><button data-p2-resume>Resume draft →</button></div>':'')+
    '<div class="ls-p2-classic"><strong>Original quick-log shortcuts</strong><p>Keep using the proven P1 logging paths below, or choose the new P2 cards above.</p></div>';
-  main.insertBefore(section,list);
+  const motivation=main.querySelector('.ls-hero');
+  // Keep the user's original motivational portrait first, then the P2
+  // entry tiles, before any saved-workout or legacy logging shortcuts.
+  if(motivation)motivation.insertAdjacentElement('afterend',section);
+  else main.insertBefore(section,list);
 }
 function go(v){message='';state.view=v;render();}
 function open(id){
