@@ -59,6 +59,10 @@ test.describe('P2 four-category logging modes and safe source reuse',()=>{
  test('Today keeps the existing hero, original quick logging actions and four new categories',async({page})=>{
   await fresh(page);
   await expect(page.locator('.ls-hero')).toHaveCount(1);
+  expect(await page.evaluate(()=>{
+   const hero=document.querySelector('.ls-hero'),tiles=document.querySelector('[data-p2-today]');
+   return hero?.nextElementSibling===tiles;
+  })).toBe(true);
   for(const category of ['resistance','cardio','mobility','smart']){
    await expect(page.locator('[data-p2-entry="'+category+'"]')).toBeVisible();
    await expect(page.locator('[data-day-action="'+(category==='smart'?'describe':category)+'"]')).toBeVisible();
