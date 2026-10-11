@@ -170,6 +170,13 @@ function findUnaccountedExerciseSegments(source,mentions,defaultUnit='kg'){
     }));
 }
 
+function preserveExplicitMemoryResult(parsed){
+  return !!(parsed && (
+    (Array.isArray(parsed.memoryAssumptions)&&parsed.memoryAssumptions.length) ||
+    (Array.isArray(parsed.memoryLearnedAliases)&&parsed.memoryLearnedAliases.length) ||
+    (Array.isArray(parsed.items)&&parsed.items.some(item=>item?.memorySuggestion))
+  ));
+}
 function validateReview(parsed){
   if(parsed?.p1AuditError)return {ok:false,why:'Exercise detection could not be verified. Edit the description and try again.'};
   if(!Array.isArray(parsed?.items)||!parsed.items.length)return {ok:false,why:'No activities detected'};
@@ -192,7 +199,7 @@ function validateReview(parsed){
   return {ok:true,why:''};
 }
 if(typeof globalThis!=='undefined'&&globalThis.__LASTSET_TEST_ONLY__){
-  globalThis.LastSetSmartLogP1Test={parseProgressivePhrase,reviewWarnings,validateReview,findUnaccountedExerciseSegments,buildSmartLogSourceInventory};
+  globalThis.LastSetSmartLogP1Test={parseProgressivePhrase,reviewWarnings,validateReview,findUnaccountedExerciseSegments,buildSmartLogSourceInventory,preserveExplicitMemoryResult};
   return;
 }
 if(typeof window==='undefined'||typeof parseSmartWorkout!=='function')return;
@@ -200,6 +207,10 @@ const previousParser=parseSmartWorkout,previousReview=aiParsedHtml;
 parseSmartWorkout=function(text){
   const result=previousParser(text);
   if(!result||!Array.isArray(result.items))return result;
+  // LastSet Memory has an explicit user-requested source of truth: recorded
+  // historical sets. Do not reparse a command such as "same as last time"
+  // into an empty or invented workout, or replace the Memory review renderer.
+  if(preserveExplicitMemoryResult(result))return result;
   const source=safe(text),unit=typeof data!=='undefined'?(data?.profile?.weightUnit||'kg'):'kg';
   try{
     const mentions=typeof findExerciseMentions==='function'?(findExerciseMentions(source)||[]).slice().sort((a,b)=>a.start-b.start):[];
