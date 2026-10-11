@@ -1,3 +1,4 @@
+// P1 exhaustive audit storage-recovery rerun: verifies emergency warning survives partial registry writes.
 const {test,expect}=require('@playwright/test');
 const KEY='lastset-data-v1';
 const REGISTRY='lastset-user-spaces-v1';
