@@ -238,23 +238,23 @@ parseSmartWorkout=function(text){
   // historical sets. Do not reparse a command such as "same as last time"
   // into an empty or invented workout, or replace the Memory review renderer.
   if(preserveExplicitMemoryResult(result))return result;
-  if(Array.isArray(result.memoryLearnedAliases)&&result.memoryLearnedAliases.length){
-    // The Memory layer already substituted an explicitly learned exercise
-    // alias. Keep its matching and sets intact; enable compact P1 editing.
-    result.items.forEach(item=>{
-      if(item.kind!=='resistance')return;
-      item.p1Review=true;
-      item.p1Acknowledged=false;
-      item.p1Source=safe(text);
-      item.p1Warnings=item.p1Warnings||[];
-      item.p1RequiresRewrite=!!item.p1RequiresRewrite;
-    });
-    return result;
-  }
   const source=safe(text),unit=typeof data!=='undefined'?(data?.profile?.weightUnit||'kg'):'kg';
   try{
-    const mentions=typeof findExerciseMentions==='function'?(findExerciseMentions(source)||[]).slice().sort((a,b)=>a.start-b.start):[];
-    const inventory=buildSmartLogSourceInventory(source,mentions,unit);
+    // The Memory layer can recognize a confirmed nickname but its fallback
+    // parser may still misread set counts. Substitute only learned *exercise
+    // names* for inventory segmentation and parse today's set wording fresh.
+    // Never reuse a previous workout's weights/reps without explicit consent.
+    let inventorySource=source;
+    for(const learned of result.memoryLearnedAliases||[]){
+      const phrase=safe(learned.phrase).trim();
+      const ex=EXERCISES.find(e=>e.id===learned.exerciseId);
+      if(!phrase||!ex)continue;
+      const safePhrase=phrase.replace(/[.*+?^${}()|[\]\\]/g,'\\    const mentions=typeof findExerciseMentions==='function'?(findExerciseMentions(source)||[]).slice().sort((a,b)=>a.start-b.start):[];
+    const inventory=buildSmartLogSourceInventory(source,mentions,unit);');
+      inventorySource=inventorySource.replace(new RegExp('\\b'+safePhrase+'\\b','gi'),ex.name);
+    }
+    const mentions=typeof findExerciseMentions==='function'?(findExerciseMentions(inventorySource)||[]).slice().sort((a,b)=>a.start-b.start):[];
+    const inventory=buildSmartLogSourceInventory(inventorySource,mentions,unit);
     const used=new Set();
     const previousItems=result.items.slice();
     const ordered=[];
@@ -294,7 +294,7 @@ parseSmartWorkout=function(text){
       item.p1Acknowledged=false;
       item.p1RequiresRewrite=entry.needsRewrite;
       item.p1Warnings=unique([...entry.warnings,...(entry.needsRewrite?['Edit and split the original description before saving.']:[])]);
-      item.notes=[index>=0?previousItems[index].notes:null,'Original Smart Log: '+entry.source].filter(Boolean).join(' · ');
+      item.notes=[index>=0?previousItems[index].notes:null,'Original Smart Log: '+(result.memoryLearnedAliases?.length?source:entry.source)].filter(Boolean).join(' · ');
       ordered.push(item);
     }
     // Preserve cardio data and genuinely independent inferred records. Drop
