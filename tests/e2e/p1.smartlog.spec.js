@@ -23,6 +23,32 @@ async function records(page){
 }
 function resistance(sessions){return Object.values(sessions||{}).flat().find(s=>s.type==='resistance')}
 test.describe('P1 progressive Smart Log end-to-end',()=>{
+  test('explicit Memory recall preserves earlier sets and shows its provenance',async({page})=>{
+    await start(page);
+    await page.evaluate(key=>{
+      const db=JSON.parse(localStorage.getItem(key));
+      const day=new Date();day.setDate(day.getDate()-7);
+      const iso=day.getFullYear()+'-'+String(day.getMonth()+1).padStart(2,'0')+'-'+String(day.getDate()).padStart(2,'0');
+      db.sessions=db.sessions||{};
+      db.sessions[iso]=[{id:'p1-memory-history',type:'resistance',createdAt:Date.now()-604800000,
+        exercises:[{exerciseId:'bench-press',name:'Bench Press',sets:[{weight:80,reps:10},{weight:80,reps:10},{weight:80,reps:8}]}]}];
+      localStorage.setItem(key,JSON.stringify(db));
+    },KEY);
+    await page.reload({waitUntil:'domcontentloaded'});
+    await expect(page.locator('.bottom-nav')).toBeVisible();
+    await page.locator('[data-nav="day"]').click();
+    await page.locator('[data-day-action="describe"]').first().click();
+    await page.locator('#ai-text').fill('bench press same as last time');
+    await page.locator('[data-action="parse-ai"]').click();
+    await expect(page.locator('.ls-memory-used')).toBeVisible();
+    await expect(page.locator('.ai-set')).toHaveCount(3);
+    await page.locator('[data-action="confirm-ai-workout"]').click();
+    const sessions=await records(page);
+    const todays=Object.entries(sessions).sort(([a],[b])=>b.localeCompare(a));
+    const today=todays.find(([_,ss])=>ss.some(v=>v.id!=='p1-memory-history'&&v.type==='resistance'));
+    const newest=today?.[1].find(v=>v.id!=='p1-memory-history'&&v.type==='resistance');
+    expect(newest?.exercises?.find(e=>e.exerciseId==='bench-press')?.sets.map(v=>[v.weight,v.reps])).toEqual([[80,10],[80,10],[80,8]]);
+  });
   test('every bench set persists after full reload',async({page})=>{
     await start(page);
     await parse(page,'Bench press 80kg for 8, then 85kg for 6 and 5');
