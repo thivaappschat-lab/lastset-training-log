@@ -1,0 +1,70 @@
+name: LastSet Whole App Stress Gate
+on:
+  push:
+    branches: [p2-redteam-20261012]
+    paths:
+      - '.github/workflows/lastset-full-redteam.yml'
+      - 'tests/e2e/p0.trust.spec.js'
+      - 'tests/e2e/p1.exhaustive.spec.js'
+      - 'tests/e2e/p1.smartlog.spec.js'
+      - 'tests/e2e/lastset.production.spec.js'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: All JavaScript tests and source syntax
+        run: |
+          set -e
+          for file in lastset-*.js tests/*-smoke.js tests/p0-*.js tests/p1-*.js; do
+            node --check "$file"
+          done
+      - name: Full smoke tests
+        run: |
+          set -e
+          for file in tests/*-smoke.js tests/p0-data-trust-smoke.js tests/p0-storage-save-smoke.js tests/p0-registry-save-smoke.js tests/p0-restore-smoke.js tests/p1-gym-language-smoke.js tests/p1-source-boundary-smoke.js tests/muscle-explorer-coverage.js; do
+            echo "RUN $file"
+            node "$file"
+          done
+  existing-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 58
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [mobile-chromium, mobile-webkit]
+    env:
+      CI: 'true'
+      LASTSET_BASE_URL: http://127.0.0.1:4173/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium webkit
+      - run: bash build-cloudflare.sh
+      - name: Start disposable isolated app
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory dist >/tmp/lastset-fullqa.log 2>&1 &
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:4173/ | grep -q lastset-release && exit 0; sleep 1; done
+          cat /tmp/lastset-fullqa.log
+          exit 1
+      - name: Existing full application browser regression
+        run: npx playwright test tests/e2e/p0.trust.spec.js tests/e2e/p1.exhaustive.spec.js tests/e2e/p1.smartlog.spec.js tests/e2e/lastset.production.spec.js --project=${{ matrix.browser }} --retries=0 --timeout=40000
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lastset-full-redteam-evidence-${{ matrix.browser }}
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
