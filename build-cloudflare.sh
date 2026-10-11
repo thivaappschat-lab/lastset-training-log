@@ -31,7 +31,6 @@ cp lastset-hotfix.js dist/
 cp lastset-smartlog-shorthand.js dist/
 cp lastset-core-reliability.js dist/
 cp lastset-smartlog-p1.js dist/
-cp lastset-voice-repair.js dist/
 cp lastset-smartlog-mobile.js dist/
 cp lastset-smartlog-mobile.css dist/
 cp lastset-memory.js dist/
