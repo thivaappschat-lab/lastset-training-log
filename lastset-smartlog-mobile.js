@@ -171,8 +171,9 @@ function successBanner(){
 }
 const baseRender=render;
 render=function(){
-  // Dismiss the blocking sheet automatically once its last real issue is fixed.
-  if(sheetIndex>=0 && state.aiParsed && !issue(state.aiParsed.items?.[sheetIndex]||{}) && !state.aiParsed.p1AuditError)sheetIndex=-1;
+  // The sheet remains open until explicit confirmation. This prevents a
+  // checkbox or select from being destroyed before assistive tech and mobile
+  // browsers finish processing the interaction.
   baseRender();
   // Legacy LastSet enhancement marks its decorative theme as "amirtha" on
   // every render. Apply actual device appearance *after* that layer.
