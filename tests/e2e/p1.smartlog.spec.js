@@ -89,6 +89,7 @@ test.describe('P1 progressive Smart Log end-to-end',()=>{
     await page.locator('[data-p1-reps="0:1"]').blur();
     await expect(page.locator('[data-mobile-fix-next]')).toBeVisible();
     await page.locator('[data-p1-ack="0"]').check();
+    await page.locator('[data-mobile-sheet-close]').first().click();
     await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeEnabled();
     await page.locator('[data-action="confirm-ai-workout"]').click();
     const session=resistance(await records(page));
@@ -116,6 +117,7 @@ test.describe('P1 progressive Smart Log end-to-end',()=>{
     await page.locator('[data-p1-reps="2:1"]').fill('7');
     await page.locator('[data-p1-reps="2:1"]').blur();
     await page.locator('[data-p1-ack="2"]').check();
+    await page.locator('[data-mobile-sheet-close]').first().click();
     await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeEnabled();
     await page.locator('[data-action="confirm-ai-workout"]').click();
     const before=resistance(await records(page));
@@ -236,14 +238,14 @@ test.describe('Mobile Scan Fix Save additions',()=>{
     await page.emulateMedia({colorScheme:'light'});
     await start(page);
     await expect(page.locator('html')).toHaveAttribute('data-lastset-theme','light');
-    await page.locator('[data-nav="profile"]').click();
+    await page.locator('.bottom-nav [data-nav="profile"]').click();
     await expect(page.locator('#lastset-theme-mode')).toHaveValue('system');
     await page.locator('#lastset-theme-mode').selectOption('dark');
     await page.locator('[data-action="save-profile"]').click();
     await expect(page.locator('html')).toHaveAttribute('data-lastset-theme','dark');
     await page.reload({waitUntil:'domcontentloaded'});
     await expect(page.locator('html')).toHaveAttribute('data-lastset-theme','dark');
-    await page.locator('[data-nav="profile"]').click();
+    await page.locator('.bottom-nav [data-nav="profile"]').click();
     await page.locator('#lastset-theme-mode').selectOption('system');
     await page.locator('[data-action="save-profile"]').click();
     await expect(page.locator('html')).toHaveAttribute('data-lastset-theme','light');
