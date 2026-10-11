@@ -257,7 +257,7 @@ function savePreset(){
   catch(_){message='Could not save the reusable session. Your workout draft is unchanged.';render();}
 }
 function commit(){
-  const d=active();if(!d)return;if(failure||!checkResistance()||(d.copied&&!d.confirmed)){message='Review the draft before saving.';render();return;}
+  const d=active();if(!d)return;if(!checkResistance()||(d.copied&&!d.confirmed)){message='Review the draft before saving.';render();return;}
   const profileId=d.userId;
   const mark=d.id;
   let stored;
