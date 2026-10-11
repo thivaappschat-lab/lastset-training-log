@@ -172,3 +172,24 @@ html[data-lastset-theme="light"] .ls-v14-history-row,html[data-lastset-theme="li
 html[data-lastset-theme="light"] .ls-users-panel .ls-user-row,html[data-lastset-theme="light"] .ls-users-panel .ls-choice-card{background:#f4f6fb !important;color:var(--ink) !important;border-color:var(--line) !important}
 html[data-lastset-theme="light"] .ls-integrity-label{color:#51617a !important}
 html[data-lastset-theme="light"] .ls-integrity-input{color:var(--ink) !important;background:#fff !important;border-color:var(--line) !important}
+
+
+/* 0.16.5 — direct exercise editor; thumb-friendly and keyboard-aware */
+.ls-mobile-quick{display:grid;gap:10px;border:1px solid var(--line);background:var(--surface-2);border-radius:13px;padding:13px 11px;margin-bottom:8px}
+.ls-mobile-quick>strong{font-size:15px;color:var(--ink)}
+.ls-mobile-quick>p,.ls-mobile-quick>small{font-size:11px;line-height:1.5;color:var(--muted);margin:0}
+.ls-mobile-quick-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.ls-mobile-quick-grid label,.ls-mobile-alias-label{display:block;min-width:0;font-size:11px;font-weight:700;color:var(--muted)}
+.ls-mobile-quick-grid input,.ls-mobile-alias-label input{width:100%;min-width:0;min-height:48px;margin-top:5px;padding:10px 7px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:16px}
+.ls-mobile-quick [data-mobile-apply]{min-height:49px;margin:0}
+.ls-mobile-quick-error:empty{display:none}
+.ls-mobile-quick .ls-mobile-quick-error:not(:empty){color:var(--red);font-size:12px;line-height:1.45}
+.ls-mobile-previous{display:grid;gap:7px;border-top:1px solid var(--line);padding:11px 0 0}
+.ls-mobile-previous strong{font-size:12px;color:var(--ink)}
+.ls-mobile-previous p,.ls-mobile-previous small{font-size:11px;line-height:1.45;color:var(--muted);margin:0}
+.ls-mobile-previous [data-memory-use]{min-height:45px}
+.ls-mobile-remember{display:flex;gap:10px;align-items:flex-start;border-top:1px solid var(--line);padding:12px 0 2px;font-size:12px;line-height:1.5;color:var(--ink)}
+.ls-mobile-remember input{width:22px;height:22px;min-width:22px;accent-color:var(--accent)}
+@media(max-width:355px){.ls-mobile-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+html[data-lastset-theme="light"] .ls-mobile-quick{background:#f2f5fa;color:#172136}
+html[data-lastset-theme="light"] .ls-mobile-quick-grid input,html[data-lastset-theme="light"] .ls-mobile-alias-label input{background:#fff!important;color:#172136!important;border-color:#cfd7e6!important}
