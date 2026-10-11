@@ -44,10 +44,11 @@ function parseProgressivePhrase(text,loadType='external',defaultUnit='kg'){
   // a progressive sequence. Avoid overriding mixed-assisted ambiguity above.
   const spokenRepThenSets=new RegExp('\\b(\\d+(?:\\.\\d+)?)\\s*('+weightUnit+')\\b(?:\\s+(?:assistance|assist))?\\s*(?:for\\s+|at\\s+)?(\\d{1,3})\\s*(?:reps?|repetitions?)?\\s*(?:[,;]\\s*|\\s+)(?:for\\s+)?(\\d{1,2})\\s*sets?\\b','i');
   const spokenSetsThenRep=new RegExp('\\b(\\d+(?:\\.\\d+)?)\\s*('+weightUnit+')\\b(?:\\s+(?:assistance|assist))?\\s*(\\d{1,2})\\s*sets?\\s*(?:of|at|for|x|×)?\\s*(\\d{1,3})\\s*(?:reps?)?\\b','i');
-  const spoken=spokenRepThenSets.exec(t)||spokenSetsThenRep.exec(t);
+  const repFirst=spokenRepThenSets.exec(t);
+  const spoken=repFirst||spokenSetsThenRep.exec(t);
   if(spoken){
-    const count=Number(spokenRepThenSets.test(t)?spoken[4]:spoken[3]);
-    const reps=Number(spokenRepThenSets.test(t)?spoken[3]:spoken[4]);
+    const count=Number(repFirst?spoken[4]:spoken[3]);
+    const reps=Number(repFirst?spoken[3]:spoken[4]);
     const w=toKg(spoken[1],spoken[2],defaultUnit);
     if(w!==null&&Number.isInteger(count)&&count>=1&&count<=20&&Number.isInteger(reps)&&reps>=1&&reps<=500){
       return {sets:Array.from({length:count},()=>({weightKg:w,reps,setType:'working'})),warnings,recognized:true};
@@ -123,7 +124,7 @@ function buildSmartLogSourceInventory(source,mentions,defaultUnit='kg'){
   const found=(mentions||[]).slice().sort((a,b)=>a.start-b.start);
   const candidates=found.map(m=>{
     const preceding=text.slice(Math.max(0,m.start-32),m.start);
-    const misheard=/\\bmy\\s+sister\\s*$/i.exec(preceding);
+    const misheard=/\bmy\s+sister\s*$/i.exec(preceding);
     if(m.exercise?.id==='triceps-dip'&&misheard){
       // The recognizer sometimes renders "assisted dip" as "my sister Dip".
       // Keep this as a boundary and force exercise selection; never infer
