@@ -357,6 +357,9 @@ document.addEventListener('change',e=>{
     const item=state?.aiParsed?.items?.[idx];
     const exercise=typeof EXERCISES!=='undefined'?EXERCISES.find(ex=>ex.id===t.value):null;
     if(item&&item.kind==='resistance'&&exercise){
+      // A manually identified exercise can optionally teach the recognizer
+      // this phrase, but never learn a new alias without explicit opt-in.
+      if(!item.exerciseId)item.p1WasUnidentified=true;
       item.exerciseId=exercise.id;item.name=exercise.name;
       item.equipment=exercise.equipment;
       item.primaryMuscles=exercise.muscles||[];
