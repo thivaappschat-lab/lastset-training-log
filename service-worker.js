@@ -48,6 +48,8 @@ const ASSETS = [
   './lastset-diagnostics.js',
   './lastset-mobility.js',
   './lastset-smartlog-p1.js',
+  './lastset-smartlog-mobile.js',
+  './lastset-smartlog-mobile.css',
   './assets/anatomy-front.webp',
   './assets/anatomy-back.webp',
   './assets/anatomy-female-front.webp',
