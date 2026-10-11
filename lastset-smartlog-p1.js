@@ -106,7 +106,7 @@ function parseProgressivePhrase(text,loadType='external',defaultUnit='kg'){
 function buildSmartLogSourceInventory(source,mentions,defaultUnit='kg'){
   const text=safe(source);
   const found=(mentions||[]).slice().sort((a,b)=>a.start-b.start);
-  const candidates=found.map(m=>({start:m.start,end:m.end,exercise:m.exercise||null,alias:m.alias||'',ambiguity:null}));
+  const candidates=found.map(m=>({start:m.start,end:m.end,exercise:m.exercise||null,alias:m.alias||'',ambiguity:null,recognised:true}));
   const overlaps=(start,end)=>candidates.some(m=>start<m.end&&end>m.start);
   const addUnknown=(start,end,ambiguity,alias='')=>{
     if(!overlaps(start,end))candidates.push({start,end,ambiguity,alias,exercise:null});
@@ -164,7 +164,7 @@ function buildSmartLogSourceInventory(source,mentions,defaultUnit='kg'){
 }
 function findUnaccountedExerciseSegments(source,mentions,defaultUnit='kg'){
   return buildSmartLogSourceInventory(source,mentions,defaultUnit)
-    .filter(x=>!x.exercise).map(x=>({
+    .filter(x=>!x.recognised).map(x=>({
       start:x.start,source:x.source,ambiguity:x.ambiguity,
       sets:x.sets,warnings:x.warnings,needsRewrite:x.needsRewrite
     }));
