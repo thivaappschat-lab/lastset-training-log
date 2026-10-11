@@ -21,3 +21,15 @@
 html[data-lastset-theme="light"] .ls-v14-voice-card{background:#fff;color:#172136;border-color:#d9dfeb}
 html[data-lastset-theme="light"] .ls-v14-voice-card p{color:#4e5a70}
 html[data-lastset-theme="light"] .ls-v14-voice-card [data-voice-text]{background:#f2f5fc;border-color:#d9dfeb;color:#172136}
+
+
+/* Recoverable microphone permissions on iOS Safari and standalone PWA */
+.ls-v14-voice-card [hidden]{display:none!important}
+.ls-v14-mic-help{border:1px solid var(--line);border-radius:13px;padding:12px;margin:9px 0;background:var(--surface-2);text-align:left}
+.ls-v14-mic-help strong{font-size:14px;display:block}
+.ls-v14-mic-help p{font-size:13px;line-height:1.55;margin:8px 0;color:var(--ink)}
+.ls-v14-mic-help small{font-size:11px;line-height:1.5;display:block;color:var(--muted)}
+.ls-v14-voice-actions [data-voice-retry]:not([hidden]){grid-column:1/-1;grid-row:1;background:var(--accent);color:#121212;font-weight:800;min-height:50px}
+.ls-v14-voice-actions [data-voice-type]:not([hidden]){grid-column:1/-1;min-height:46px}
+html[data-lastset-theme="light"] .ls-v14-mic-help{background:#f3f6fc;border-color:#d6dce9;color:#172136}
+html[data-lastset-theme="light"] .ls-v14-mic-help p{color:#233149}
