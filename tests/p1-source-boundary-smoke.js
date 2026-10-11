@@ -96,8 +96,8 @@ assert.equal(p.validateReview({items:[{kind:'resistance',exerciseId:'chin-up',se
   const memory={memoryAssumptions:[{sourceDate:'2026-10-01'}],items:[{kind:'resistance',exerciseId:'bench-press',sets:expected}]};
   assert.equal(p.preserveExplicitMemoryResult(memory),true,'explicit memory commands must bypass source-set parsing');
   assert.deepStrictEqual(memory.items[0].sets,expected,'the recalled set sequence is the source of truth');
-  assert.equal(p.preserveExplicitMemoryResult({memoryLearnedAliases:[{phrase:'my bench'}],items:[{}]}),true);
-  assert.equal(p.preserveExplicitMemoryResult({items:[{memorySuggestion:{sourceDate:'2026-10-01'}}]}),true);
+  assert.equal(p.preserveExplicitMemoryResult({memoryLearnedAliases:[{phrase:'my bench'}],items:[{}]}),false,'learned names should use compact editing');
+  assert.equal(p.preserveExplicitMemoryResult({items:[{memorySuggestion:{sourceDate:'2026-10-01'}}]}),false,'history suggestions cannot bypass compact review');
   assert.equal(p.preserveExplicitMemoryResult({items:[{kind:'resistance',exerciseId:'bench-press'}]}),false);
 }
 console.log('P1 source-boundary / invented-set regression passed: 10 compound fixtures and fail-closed review');
