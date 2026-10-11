@@ -435,3 +435,63 @@ test.describe('iPhone voice mishearing recovery — 50 kg bench and assisted dip
     expect(items[1].loadType).toBe('assisted');
   });
 });
+
+
+test.describe('Round 4C — natural spoken set count is not a rep sequence',()=>{
+  test('exact clean Grok wording: four bench sets plus three assisted dip sets persist after reload',async({page})=>{
+    await start(page);
+    await parse(page,'Bench Press 50 kg for 3, four sets. Assisted Dip 50 kg assistance for 7, three sets.');
+    await expect(page.locator('.ls-mobile-status')).toContainText('2 exercises · 7 sets');
+    await expect(page.locator('.ls-mobile-state.good')).toContainText('All clear');
+    const expected={
+      ids:['bench-press','assisted-dip'],
+      sets:[Array.from({length:4},()=>[50,3]),Array.from({length:3},()=>[50,7])]
+    };
+    const parsed=await page.evaluate(()=>({
+      ids:state.aiParsed.items.map(i=>i.exerciseId),
+      sets:state.aiParsed.items.map(i=>i.sets.map(s=>[s.weightKg,s.reps]))
+    }));
+    expect(parsed).toEqual(expected);
+    await page.locator('[data-action="confirm-ai-workout"]').click();
+    await expect(page.locator('.ls-mobile-success')).toBeVisible();
+    expect(resistance(await records(page)).exercises.map(i=>i.sets.map(s=>[s.weight,s.reps]))).toEqual(expected.sets);
+    await page.reload({waitUntil:'domcontentloaded'});
+    expect(resistance(await records(page)).exercises.map(i=>i.sets.map(s=>[s.weight,s.reps]))).toEqual(expected.sets);
+  });
+  test('misheard my sister Dip remains unidentified with seven candidate sets until confirmation',async({page})=>{
+    await start(page);
+    await parse(page,'Bench Press 50 kg for 3, four sets. My sister Dip 50 kg assistance for 7, three sets.');
+    await expect(page.locator('.ls-mobile-status')).toContainText('2 exercises · 7 sets');
+    await expect(page.locator('.ls-mobile-state.warning')).toContainText('1 issue');
+    await expect(page.locator('[data-mobile-fix-next]')).toBeVisible();
+    const parsed=await page.evaluate(()=>state.aiParsed.items.map(x=>({
+      id:x.exerciseId,sets:x.sets.map(s=>[s.weightKg,s.reps]),warnings:x.p1Warnings
+    })));
+    expect(parsed.map(x=>x.id)).toEqual(['bench-press',null]);
+    expect(parsed[0].sets).toEqual(Array.from({length:4},()=>[50,3]));
+    expect(parsed[1].sets).toEqual(Array.from({length:3},()=>[50,7]));
+    expect(parsed[1].warnings.join(' ')).toMatch(/speech recognition error/i);
+    expect(resistance(await records(page))).toBeUndefined();
+    await page.locator('[data-mobile-fix-next]').click();
+    await page.locator('[data-p1-exercise="1"]').selectOption('assisted-dip');
+    await page.locator('[data-p1-ack="1"]').check();
+    await page.locator('[data-mobile-sheet-close]').first().click();
+    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeEnabled();
+    await page.locator('[data-action="confirm-ai-workout"]').click();
+    expect(resistance(await records(page)).exercises.map(i=>[i.exerciseId,i.sets.length])).toEqual([['bench-press',4],['assisted-dip',3]]);
+  });
+  test('count-first wording three sets of seven and four sets of three',async({page})=>{
+    await start(page);
+    await parse(page,'Bench Press 50kg four sets of three. Assisted Dip 50 kg three sets of seven.');
+    await expect(page.locator('.ls-mobile-status')).toContainText('2 exercises · 7 sets');
+    expect(await page.evaluate(()=>state.aiParsed.items.map(i=>i.sets.map(s=>[s.weightKg,s.reps]))))
+      .toEqual([Array.from({length:4},()=>[50,3]),Array.from({length:3},()=>[50,7])]);
+  });
+  test('progressive repetitions without explicit sets remains a sequence not multiplied',async({page})=>{
+    await start(page);
+    await parse(page,'Bench Press 50 kg for 3, 4 and 5');
+    await expect(page.locator('.ls-mobile-status')).toContainText('1 exercises · 3 sets');
+    expect(await page.evaluate(()=>state.aiParsed.items[0].sets.map(s=>[s.weightKg,s.reps])))
+      .toEqual([[50,3],[50,4],[50,5]]);
+  });
+});
