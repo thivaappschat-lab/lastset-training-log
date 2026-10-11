@@ -1,0 +1,53 @@
+name: LastSet P2 Optional Logging QA
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'lastset-p2.js'
+      - 'lastset-p2.css'
+      - 'tests/e2e/p2.logging.spec.js'
+      - 'worker.js'
+      - 'build-cloudflare.sh'
+      - '.github/workflows/p2-logging-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: lastset-p2-logging-qa
+  cancel-in-progress: true
+jobs:
+  p2-mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: 'true'
+      LASTSET_BASE_URL: http://127.0.0.1:4173/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium webkit
+      - run: bash build-cloudflare.sh
+      - name: Start isolated P2 candidate
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory dist > /tmp/lastset-p2-server.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/ | grep -q lastset-release; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/lastset-p2-server.log
+          exit 1
+      - name: Test P2 optional live and completed logging on mobile
+        run: npx playwright test tests/e2e/p2.logging.spec.js --project=mobile-chromium --project=mobile-webkit --retries=0 --timeout=30000
+      - name: Upload failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lastset-p2-mobile-evidence
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
