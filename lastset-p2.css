@@ -77,3 +77,11 @@
 .ls-p2 button:focus-visible,.ls-p2-today button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 @media(min-width:600px){.ls-p2-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.ls-p2-grid>button{min-height:140px}}
 @media(max-width:350px){.ls-p2-grid{gap:7px}.ls-p2-grid>button{padding:10px;min-height:119px}.ls-p2-grid strong{font-size:12px}.ls-p2-grid small{font-size:10px}.ls-p2-inline{gap:6px}}
+
+/* Unified Today: legacy actions remain available under one compact reuse control. */
+.ls-p2-reuse{margin:14px 0 8px;border:1px solid var(--line);border-radius:16px;background:var(--surface);overflow:hidden}
+.ls-p2-reuse>summary{padding:14px 16px;cursor:pointer;color:var(--ink);font-size:13px;font-weight:750;list-style-position:inside}
+.ls-p2-reuse>div{padding:0 12px 12px}
+.ls-p2-reuse .quick-workout,.ls-p2-reuse .ls-saved-workouts-card{margin:8px 0}
+.ls-p2-rest{display:block;width:100%;margin:9px 0 0;padding:12px;border:1px solid var(--line);border-radius:13px;background:var(--surface);color:var(--muted);font-size:13px;text-align:left}
+.ls-p2-rest:focus-visible,.ls-p2-reuse summary:focus-visible{outline:2px solid var(--green);outline-offset:2px}
