@@ -651,3 +651,76 @@ test.describe('iPhone microphone permissions — deny and recover',()=>{
     await expect(page.locator('.ls-v14-voice')).toHaveCount(0);
   });
 });
+
+
+test.describe('P1 save confirmation dismissal and follow-through',()=>{
+  const phrase='Bench Press 50 kg for 3, four sets. Assisted Dip 50 kg assistance for 7, three sets.';
+  const expected=[Array.from({length:4},()=>[50,3]),Array.from({length:3},()=>[50,7])];
+
+  test('View workout removes modal immediately, reveals correct saved sets and stays closed after navigation/reload',async({page})=>{
+    await start(page);
+    await parse(page,phrase);
+    await expect(page.locator('.ls-mobile-status')).toContainText('2 exercises · 7 sets');
+    await page.locator('[data-action="confirm-ai-workout"]').click();
+    await expect(page.locator('.ls-mobile-success')).toBeVisible();
+    await expect(page.locator('[data-mobile-view]')).toBeVisible();
+    await page.locator('[data-mobile-view]').click();
+    await expect(page.locator('.ls-mobile-success')).toHaveCount(0);
+    await expect(page.locator('.session-card')).toContainText('Bench Press');
+    await expect(page.locator('.session-card')).toContainText('Assisted Dip');
+    await expect(page.locator('.session-card')).toContainText('50 kg');
+    expect(resistance(await records(page)).exercises.map(x=>x.sets.map(s=>[s.weight,s.reps]))).toEqual(expected);
+    await page.locator('.bottom-nav [data-nav="day"]').click();
+    await expect(page.locator('.ls-mobile-success')).toHaveCount(0);
+    await page.reload({waitUntil:'domcontentloaded'});
+    await expect(page.locator('.ls-mobile-success')).toHaveCount(0);
+    expect(resistance(await records(page)).exercises.map(x=>x.sets.map(s=>[s.weight,s.reps]))).toEqual(expected);
+  });
+
+  test('Back to Today dismisses modal and allows immediate second workout interaction',async({page})=>{
+    await start(page);
+    await parse(page,phrase);
+    await page.locator('[data-action="confirm-ai-workout"]').click();
+    await expect(page.locator('.ls-mobile-success')).toBeVisible();
+    await page.locator('[data-mobile-today]').click();
+    await expect(page.locator('.ls-mobile-success')).toHaveCount(0);
+    await expect(page.locator('[data-day-action="describe"]').first()).toBeVisible();
+    await page.locator('[data-day-action="describe"]').first().click();
+    await expect(page.locator('#ai-text')).toBeVisible();
+    await expect(page.locator('.ls-mobile-success')).toHaveCount(0);
+    expect(resistance(await records(page)).exercises.map(x=>x.sets.map(s=>[s.weight,s.reps]))).toEqual(expected);
+  });
+
+  test('rapid repeated Save click does not duplicate sessions and modal dismisses once',async({page})=>{
+    await start(page);
+    await parse(page,phrase);
+    await page.evaluate(()=>{
+      const button=document.querySelector('[data-action="confirm-ai-workout"]');
+      button.click();
+      button.click();
+    });
+    await expect(page.locator('.ls-mobile-success')).toHaveCount(1);
+    const before=await records(page);
+    const resistanceRecords=Object.values(before).flat().filter(s=>s.type==='resistance');
+    expect(resistanceRecords).toHaveLength(1);
+    expect(resistanceRecords[0].exercises.map(x=>x.sets.map(s=>[s.weight,s.reps]))).toEqual(expected);
+    await page.locator('[data-mobile-today]').click();
+    await expect(page.locator('.ls-mobile-success')).toHaveCount(0);
+    const after=await records(page);
+    expect(Object.values(after).flat().filter(s=>s.type==='resistance')).toHaveLength(1);
+  });
+
+  test('dismissed success modal never reappears on rerender',async({page})=>{
+    await start(page);
+    await parse(page,phrase);
+    await page.locator('[data-action="confirm-ai-workout"]').click();
+    await expect(page.locator('.ls-mobile-success')).toBeVisible();
+    await page.locator('[data-mobile-today]').click();
+    await expect(page.locator('.ls-mobile-success')).toHaveCount(0);
+    await page.evaluate(()=>render());
+    await expect(page.locator('.ls-mobile-success')).toHaveCount(0);
+    await page.locator('.bottom-nav [data-nav="profile"]').click();
+    await page.locator('.bottom-nav [data-nav="day"]').click();
+    await expect(page.locator('.ls-mobile-success')).toHaveCount(0);
+  });
+});
