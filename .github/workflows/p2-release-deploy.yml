@@ -18,7 +18,7 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: d04b8160bdf0f3df7658ea6c7b2161d7
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
-      EXPECTED_BUILD: a47fa0cf1ecaf61f9bfd6acf41f
+      EXPECTED_BUILD: a47fa0cf1ecaf61f9bfd6acf41f8
     steps:
       - uses: actions/checkout@v4
         with:
