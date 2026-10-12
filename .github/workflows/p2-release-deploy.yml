@@ -1,5 +1,9 @@
 name: LastSet P2 Verified Production Release
 on:
+  push:
+    branches: [p2-redteam-20261012]
+    paths:
+      - '.github/workflows/p2-release-deploy.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,7 +18,7 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: d04b8160bdf0f3df7658ea6c7b2161d7
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
-      EXPECTED_BUILD: f03ddb07baf78e96bc6a5b583ebb
+      EXPECTED_BUILD: a47fa0cf1ecaf61f9bfd6acf41f
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,7 +27,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          changed="$(git diff --name-only f03ddb07baf78e96bc6a5b583ebb7071ffafa6c2 HEAD)"
+          changed="$(git diff --name-only a47fa0cf1ecaf61f9bfd6acf41f8707082a1f189 HEAD)"
           echo "Changed paths since verified candidate artifact:"
           echo "$changed"
           if printf '%s\n' "$changed" | grep -vE '^$|^tests/|^docs/P2_REDTEAM_20261012\.md$|^\.github/workflows/' | grep -q .; then
@@ -51,9 +55,9 @@ jobs:
             });
           }
           (async()=>{
-            for(const id of [38191528895,38191528901]){
+            for(const [id,sha] of [[38208488498,'832960de37e5dae676d758f7fb9f25711f7d9ae2'],[38207938270,'a485e8382360e5bb3cb43c6c40924b1e0c96283b']]){
               const run=await load(id);
-              if(run.status!=='completed'||run.conclusion!=='success'||run.run_attempt!==1||run.head_sha!=='5fd804d9ff00c07c2e73f192ee2155e3a0cf14d3'){
+              if(run.status!=='completed'||run.conclusion!=='success'||run.run_attempt!==1||run.head_sha!==sha){
                 throw new Error('Release blocked: run '+id+' is not first-attempt green at expected tested source revision');
               }
               process.stdout.write('Verified green run '+id+'\n');
@@ -71,9 +75,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           repository: thivaappschat-lab/lastset-training-log
-          run-id: 38191353350
+          run-id: 38207887649
           github-token: ${{ github.token }}
-          name: lastset-p2-candidate-f03ddb07baf78e96bc6a5b583ebb7071ffafa6c2
+          name: lastset-p2-candidate-a47fa0cf1ecaf61f9bfd6acf41f8707082a1f189
           path: ./release
       - name: Verify SHA256 and build identity before publishing
         working-directory: release
