@@ -19,6 +19,9 @@ async function start(page,category,mode='free'){
   if(category==='resistance'){
     await expect(page.locator('.ls-exercise-hero')).toBeVisible();
     await page.locator('[data-exercise="bench-press"]').click();
+  }else if(category==='cardio'||category==='mobility'){
+    await expect(page.locator('[data-p2-mode]')).toHaveCount(0);
+    await page.locator('[data-p2-activity-choice="'+(category==='cardio'?'Running':'Yoga')+'"]').click();
   }
   await expect(page.locator('[data-p2-mode="'+mode+'"]')).toBeVisible();
   await page.locator('[data-p2-mode="'+mode+'"]').click();
