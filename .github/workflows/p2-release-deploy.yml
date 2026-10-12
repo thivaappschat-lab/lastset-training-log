@@ -1,9 +1,5 @@
 name: LastSet P2 Verified Production Release
 on:
-  push:
-    branches: [p2-redteam-20261012]
-    paths:
-      - '.github/workflows/p2-release-deploy.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -106,12 +102,12 @@ jobs:
           set -euo pipefail
           base="https://lastset-training-log.thiva-claimflow.workers.dev"
           for n in $(seq 1 12); do
-            if curl -fsS -H 'Cache-Control: no-cache' "$base/lastset-build.json" | grep -q "$EXPECTED_BUILD"; then break; fi
+            if curl -fsSL --max-time 30 -H 'Cache-Control: no-cache' "$base/lastset-build.json" | grep -q "$EXPECTED_BUILD"; then break; fi
             sleep 5
           done
-          curl -fsS -H 'Cache-Control: no-cache' "$base/lastset-build.json" | grep -q "$EXPECTED_BUILD"
+          curl -fsSL --max-time 30 -H 'Cache-Control: no-cache' "$base/lastset-build.json" | grep -q "$EXPECTED_BUILD"
           for asset in index.html lastset-p2.js lastset-p2.css service-worker.js assets/anatomy-female-back.webp assets/anatomy-male-front.webp; do
-            curl -fsS -H 'Cache-Control: no-cache' "$base/$asset?v=$EXPECTED_BUILD" > "/tmp/lastset-$(basename "$asset")"
+            curl -fsSL --max-time 30 -H 'Cache-Control: no-cache' "$base/$asset?v=$EXPECTED_BUILD" > "/tmp/lastset-$(basename "$asset")"
             case "$asset" in
               index.html) grep -q "lastset-release" "/tmp/lastset-$(basename "$asset")" ;;
               *.js|*.css|*.webp) cmp -s "dist/$asset" "/tmp/lastset-$(basename "$asset")" || { echo "::error::Deployed asset mismatch: $asset"; exit 1; } ;;
