@@ -71,17 +71,26 @@ test.describe('Evening Quick Log iPhone-first acceptance on isolated candidate o
  });
  test('Undo removes only the precise new cardio workout without deleting older history',async({page})=>{
   await fresh(page);await pinCardio(page);
-  await page.evaluate(k=>{const d=JSON.parse(localStorage.getItem(k));d.sessions['2026-09-20']=[{id:'preserve-this-run',type:'cardio',activity:'Running',duration:30}];localStorage.setItem(k,JSON.stringify(d));},STORE);
+  // Create the baseline record through the app's canonical save path.
   await page.locator('[data-p2-favorite]').click();
   await page.locator('[data-p2-confirm-copy]').check();
   await page.locator('[data-p2-finish]').click();
   await page.locator('[data-p2-commit]').click();
+  const baseline=(await allSessions(page)).filter(s=>s.type==='cardio');
+  expect(baseline).toHaveLength(1);
+  // A second save must be undoable without touching the first genuine save.
+  await page.locator('[data-p2-favorite]').click();
+  await page.locator('[data-p2-field="cardio.duration"]').fill('25');
+  await page.locator('[data-p2-confirm-copy]').check();
+  await page.locator('[data-p2-finish]').click();
+  await page.locator('[data-p2-commit]').click();
   await expect(page.locator('[data-p2-undo]')).toBeVisible();
-  expect(await allSessions(page)).toHaveLength(2);
+  expect((await allSessions(page)).filter(s=>s.type==='cardio')).toHaveLength(2);
   await page.locator('[data-p2-undo]').click();
-  const list=await allSessions(page);
+  const list=(await allSessions(page)).filter(s=>s.type==='cardio');
   expect(list).toHaveLength(1);
-  expect(list[0].id).toBe('preserve-this-run');
+  expect(list[0].id).toBe(baseline[0].id);
+  expect(list[0].duration).toBe(20);
   await expect(page.locator('[data-p2-undo]')).toHaveCount(0);
  });
  test('Resistance favorites are reference only and do not auto-mark sets completed',async({page})=>{
