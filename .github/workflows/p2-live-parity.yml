@@ -17,9 +17,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           repository: thivaappschat-lab/lastset-training-log
-          run-id: 38191353350
+          run-id: 38207887649
           github-token: ${{ github.token }}
-          name: lastset-p2-candidate-f03ddb07baf78e96bc6a5b583ebb7071ffafa6c2
+          name: lastset-p2-candidate-a47fa0cf1ecaf61f9bfd6acf41f8707082a1f189
           path: ./release
       - name: Verify local candidate hashes and release identity
         working-directory: release
@@ -27,14 +27,14 @@ jobs:
         run: |
           set -euo pipefail
           sha256sum -c candidate.sha256
-          node -e "const b=require('./dist/lastset-build.json');if(b.id!=='f03ddb07baf78e96bc6a5b583ebb')process.exit(1)"
+          node -e "const b=require('./dist/lastset-build.json');if(b.id!=='a47fa0cf1ecaf61f9bfd6acf41f8')process.exit(1)"
       - name: Compare every deployed static asset byte for byte
         working-directory: release
         shell: bash
         run: |
           set -euo pipefail
           base="https://lastset-training-log.thiva-claimflow.workers.dev"
-          id="f03ddb07baf78e96bc6a5b583ebb"
+          id="a47fa0cf1ecaf61f9bfd6acf41f8"
           matched=0
           while IFS= read -r -d '' file; do
             asset="${file#dist/}"
@@ -65,7 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           base="https://lastset-training-log.thiva-claimflow.workers.dev"
-          id="f03ddb07baf78e96bc6a5b583ebb"
+          id="a47fa0cf1ecaf61f9bfd6acf41f8"
           for route in / /index.html /app-v12 /app-v12.html; do
             tmp="$(mktemp)"
             status="$(curl -sSL --max-time 20 -o "$tmp" -w '%{http_code}' "$base$route?v=$id")"
