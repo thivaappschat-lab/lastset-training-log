@@ -3,13 +3,14 @@
 (()=>{
 'use strict';
 if(typeof state==='undefined'||typeof data==='undefined'||typeof saveData!=='function')return;
-const V='0.20.2', PREFIX='lastset-p2-active-v1:', clone=x=>JSON.parse(JSON.stringify(x));
+const V='0.21.0-dev', PREFIX='lastset-p2-active-v1:', clone=x=>JSON.parse(JSON.stringify(x));
 const esc=v=>typeof escapeHtml==='function'?escapeHtml(String(v??'')):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const catNames={resistance:'Resistance',cardio:'Cardio',mobility:'Mobility & Recovery',smart:'Smart Log'};
 const modes={quick:['Log & Finish','Enter completed training and save'],free:['Log As I Go','Log without a timer'],timed:['Log With Timer','Optional rest countdown or stopwatch']};
 const cardioNames=['Running','Treadmill','Walking','Cycling','Stationary Bike','Rowing','Swimming','Elliptical','Stair Climb','Stair Machine'];
 const mobilityNames=['Yoga','Pilates','Stretching','Mobility Drills','Foam Rolling'];
 let category='resistance',mode='quick',draft=null,sourceTab='previous',selectedActivity='',message='',failure=false,exerciseSearch='',selectedResistanceExercise='',resistanceBrowsing=false;
+let recentUndo=null;
 function identity(){return String(data?.profile?.userId||'unregistered');}
 function oldKey(){return PREFIX+identity().replace(/[^a-z0-9_-]/ig,'_').slice(0,80);}
 function key(cat=category){return oldKey()+':'+cat;}
@@ -73,6 +74,11 @@ function begin(source){
     if(category==='cardio')draft.cardio={...draft.cardio,...clone(source.preset.values)};
     if(category==='mobility')draft.mobility={...draft.mobility,...clone(source.preset.values)};
     if(category==='smart')draft.smartText=String(source.preset.values?.text||'');
+    if(category==='resistance')for(const id of source.preset.values?.exerciseIds||[]){
+      const ex=EXERCISES.find(e=>e.id===id);if(!ex)continue;
+      draft.exercises.push({id:cryptoId(),exerciseId:id,name:ex.name,loadType:ex.loadType||'external',sets:[],
+        suggested:clone(source.preset.values?.suggestions?.[id]||[]).slice(0,20),note:'',expanded:true});
+    }
   }
   if(category==='resistance'&&selectedResistanceExercise&&!draft.exercises.some(x=>x.exerciseId===selectedResistanceExercise)){
     const ex=EXERCISES.find(x=>x.id===selectedResistanceExercise);
@@ -111,6 +117,57 @@ function savedRecords(){
     ...(category==='resistance'||category==='smart'?templates.map(t=>({kind:'template',label:t.name||'Saved Workout',template:t})):[]),
     ...presets.map(p=>({kind:'preset',label:p.name,preset:p}))
   ];
+}
+
+function favorites(){return (Array.isArray(data.p2Presets)?data.p2Presets:[]).filter(p=>p.pinned&&Object.hasOwn(catNames,p.category)&&p.id&&p.values).slice(0,30);}
+function favDetails(p){
+ const v=p.values||{};
+ if(p.category==='cardio')return [v.activity,v.distance!==''&&v.distance!=null?v.distance+' km':'',v.incline!==''&&v.incline!=null?v.incline+'% incline':'',v.duration?v.duration+' min':''].filter(Boolean).join(' · ');
+ if(p.category==='mobility')return [v.activity,v.style,v.duration?v.duration+' min':''].filter(Boolean).join(' · ');
+ if(p.category==='resistance')return (v.exerciseIds||[]).length+' exercises · planned, not completed';
+ return 'Editable Smart Log';
+}
+function quickLogHtml(){
+ const fs=favorites();
+ return '<section class="ls-p2-quick" data-p2-quick><div class="ls-p2-section-title"><strong>Quick Log</strong><small>Favorites · confirm before saving</small></div>'+
+ (fs.length?'<div class="ls-p2-favorites">'+fs.map((p,i)=>'<article class="ls-p2-favorite"><button class="ls-p2-favorite-open" type="button" data-p2-favorite="'+esc(p.id)+'"><span class="ls-p2-favorite-icon">'+({cardio:'🏃',mobility:'🧘',resistance:'🏋️',smart:'🎙️'}[p.category])+'</span><span><strong>'+esc(p.name)+'</strong><small>'+esc(favDetails(p))+'</small></span><b>›</b></button><div class="ls-p2-favorite-tools"><button data-p2-fav-move="up:'+esc(p.id)+'" '+(!i?'disabled':'')+' aria-label="Move up">↑</button><button data-p2-fav-move="down:'+esc(p.id)+'" '+(i===fs.length-1?'disabled':'')+' aria-label="Move down">↓</button><button data-p2-fav-rename="'+esc(p.id)+'">Rename</button><button data-p2-fav-remove="'+esc(p.id)+'">Unpin</button></div></article>').join('')+'</div>':
+ '<p class="ls-p2-quick-empty">No favorites yet. Pin an editable activity or exercise plan below. Favorites never save directly to History.</p>')+
+ '<details class="ls-p2-quick-create"><summary>＋ Create Quick Log favorite</summary><div>'+
+ Object.entries(catNames).map(([k,v])=>'<button type="button" data-p2-quick-create="'+k+'">'+esc(v)+'</button>').join('')+
+ '<p>Select a category, enter details, then tap Pin to Quick Log. Saving to History always requires a review.</p></div></details>'+
+ '<button type="button" class="ls-p2-saved-link" data-p2-today-saved="resistance">Saved Workouts & routines <b>›</b></button></section>';
+}
+function openFavorite(id){
+ const p=favorites().find(x=>x.id===id);if(!p)return;if(draft&&!persist())return;
+ category=p.category;draft=null;mode=p.category==='smart'?'free':'quick';sourceTab='saved';selectedActivity=p.values?.activity||'';selectedResistanceExercise='';
+ if(loadDraft(category)){go('p2-workout');message='Resume or discard the unfinished draft before opening a favorite.';render();return;}
+ begin({kind:'preset',label:p.name,preset:p});
+}
+function alterFavorite(id,action,way){
+ const old=(data.p2Presets||[]).find(p=>p.pinned&&p.id===id);if(!old)return;
+ const next=clone(data),arr=next.p2Presets,idx=arr.findIndex(p=>p.id===id);
+ if(action==='remove'){if(!window.confirm('Unpin favorite? Saved workout will remain.'))return;arr[idx].pinned=false;}
+ if(action==='rename'){const name=window.prompt('Rename favorite',old.name);if(name===null)return;if(!name.trim()||name.trim().length>60)return;arr[idx].name=name.trim();}
+ if(action==='move'){const fs=arr.filter(p=>p.pinned),i=fs.findIndex(p=>p.id===id),j=i+(way==='up'?-1:1);if(j<0||j>=fs.length)return;const a=arr.findIndex(p=>p.id===fs[i].id),b=arr.findIndex(p=>p.id===fs[j].id);[arr[a],arr[b]]=[arr[b],arr[a]];}
+ try{saveData(next);data=next;render();}catch(_){showToast('Favorite update failed. History unchanged.');}
+}
+function undoLastSave(){
+ const u=recentUndo;if(!u||u.userId!==identity()||Date.now()>u.expiresAt){recentUndo=null;render();return;}
+ let stored;try{stored=JSON.parse(localStorage.getItem('lastset-data-v1')||'null');}catch(_){}
+ if(stored?.profile?.userId!==u.userId){recentUndo=null;return;}
+ const next=clone(stored),list=next.sessions?.[u.date];if(!Array.isArray(list)){recentUndo=null;render();return;}
+ let removed=0;
+ next.sessions[u.date]=list.map(s=>{
+   if(s.p2CommitId===u.id){removed++;return null;}
+   if(s.type==='resistance'&&Array.isArray(s.exercises)){
+    const kept=s.exercises.filter(e=>e.p2CommitId!==u.id);removed+=s.exercises.length-kept.length;
+    if(s.p2CreatedBy===u.id&&!kept.length)return null;return {...s,exercises:kept};
+   }
+   return s;
+ }).filter(Boolean);
+ if(!removed){recentUndo=null;render();return;}
+ try{saveData(next);data=next;recentUndo=null;render();showToast('Last save undone');}
+ catch(_){showToast('Undo failed. Saved workout retained.');}
 }
 function pageHeading(title,sub){
   return '<main class="container ls-p2"><div class="ls-p2-page-head"><button class="ls-p2-back" data-p2-back type="button" aria-label="Back">‹</button><div><div class="ls-p2-kicker">LASTSET TRAINING</div><h2>'+esc(title)+'</h2><p>'+esc(sub||'')+'</p></div></div>';
@@ -210,7 +267,7 @@ function workoutScreen(){
     (d.category==='resistance'?resistanceScreen():d.category==='cardio'?cardioScreen():d.category==='mobility'?mobilityScreen():smartScreen())+
     (d.copied&&!d.confirmed?'<label class="ls-p2-check"><input type="checkbox" data-p2-confirm-copy> I checked and corrected the copied details to reflect what I actually completed.</label>':'')+
     (message?'<p class="ls-p2-message" role="status">'+esc(message)+'</p>':'')+
-    '<div class="ls-p2-footer">'+(d.category!=='resistance'?'<button class="secondary" data-p2-save-preset>☆ Save as a reusable '+(d.category==='smart'?'Smart Log description':'activity')+'</button>':'')+(failure?'<button class="secondary" data-p2-retry>Retry draft storage</button><button class="secondary" data-p2-export>Export draft backup</button>':'')+
+    '<div class="ls-p2-footer">'+(d.category!=='resistance'?'<button class="secondary" data-p2-save-preset>☆ Save as a reusable '+(d.category==='smart'?'Smart Log description':'activity')+'</button>':'')+'<button class="secondary" data-p2-pin-favorite>★ Pin to Quick Log</button>'+(failure?'<button class="secondary" data-p2-retry>Retry draft storage</button><button class="secondary" data-p2-export>Export draft backup</button>':'')+
     '<button class="primary" data-p2-finish>'+ (d.mode==='quick'?'Review & Save':'Finish & Review')+'</button>'+
     '<button class="ls-p2-discard" data-p2-discard>Discard active draft</button></div></main>';
 }
@@ -234,6 +291,8 @@ function decorateToday(){
   section.innerHTML='<div class="ls-p2-section-title"><strong>Log your training</strong><small>Choose a category · timers optional</small></div>'+
    '<div class="ls-p2-grid">'+Object.entries(catNames).map(([id,label])=>'<button data-p2-entry="'+id+'"><span class="ls-p2-grid-icon">'+({resistance:'🏋️',cardio:'🏃',mobility:'🧘',smart:'🎙️'}[id])+'</span><strong>'+esc(label)+'</strong><small>'+({resistance:'Weights, reps and sets',cardio:'Running, cycling and more',mobility:'Yoga, stretching and recovery',smart:'Type or speak your workout'}[id])+'</small></button>').join('')+'</div>'+
    allDrafts().map(d=>'<div class="ls-p2-resume"><strong>Unfinished '+esc(catNames[d.category])+' workout</strong><button data-p2-resume="'+d.category+'">Resume draft →</button></div>').join('')+
+   quickLogHtml()+
+   (recentUndo&&recentUndo.userId===identity()&&Date.now()<recentUndo.expiresAt?'<div class="ls-p2-undo" role="status"><span>Workout saved to History</span><button data-p2-undo>Undo last save</button></div>':'')+
    '<details class="ls-p2-reuse"><summary>Previous workouts and saved routines</summary><div data-p2-reuse-body></div></details><button class="ls-p2-rest" type="button" data-p2-mark-rest>🛏️ Mark a rest day</button>';
   const motivation=main.querySelector('.ls-hero');
   // Keep the user's original motivational portrait first, then the P2
@@ -312,15 +371,18 @@ function review(){
   if(!persist()){render();return;}
   go('p2-finish');
 }
-function savePreset(){
-  const d=active();if(!d)return;
-  const name=window.prompt('Name this reusable '+catNames[d.category]+' session');if(!name?.trim())return;
-  if(name.trim().length>60){message='Choose a shorter name.';render();return;}
-  const values=d.category==='smart'?{text:d.smartText}:d.category==='cardio'?d.cardio:d.mobility;
-  const copy=clone(data);copy.p2Presets=Array.isArray(copy.p2Presets)?copy.p2Presets:[];
-  copy.p2Presets.push({id:cryptoId(),category:d.category,name:name.trim(),values:clone(values),createdAt:Date.now()});
-  try{saveData(copy);data=copy;message='Reusable session saved to this profile.';render();}
-  catch(_){message='Could not save the reusable session. Your workout draft is unchanged.';render();}
+function savePreset(pin=false){
+ const d=active();if(!d)return;
+ if(d.category==='resistance'&&!d.exercises.length){message='Choose at least one exercise before pinning.';render();return;}
+ const name=window.prompt('Name this '+(pin?'Quick Log favorite':'reusable '+catNames[d.category]+' session'));
+ if(name===null)return;if(!name.trim()||name.trim().length>60){message='Enter a name up to 60 characters.';render();return;}
+ const values=d.category==='resistance'?{exerciseIds:[...new Set(d.exercises.map(e=>e.exerciseId))],
+ suggestions:Object.fromEntries(d.exercises.map(e=>[e.exerciseId,(e.sets.length?e.sets:e.suggested||[]).slice(0,20).map(s=>({weight:Number(s.weight)||0,reps:Number(s.reps)||0,durationSeconds:Number(s.durationSeconds)||0,setType:s.setType||'working'}))]))}:
+ d.category==='smart'?{text:d.smartText}:d.category==='cardio'?d.cardio:d.mobility;
+ const next=clone(data);next.p2Presets=Array.isArray(next.p2Presets)?next.p2Presets:[];
+ next.p2Presets.push({id:cryptoId(),category:d.category,name:name.trim(),values:clone(values),pinned:!!pin,createdAt:Date.now()});
+ try{saveData(next);data=next;message=pin?'Pinned to Quick Log. History unchanged.':'Reusable session saved to this profile.';render();}
+ catch(_){message='Unable to save preset. Draft is unchanged.';render();}
 }
 function commit(){
   const d=active();if(!d)return;if(!checkResistance()||(d.copied&&!d.confirmed)){message='Review the draft before saving.';render();return;}
@@ -342,7 +404,7 @@ function commit(){
     }));
     if(resistance.length){
       let session=list.find(s=>s.type==='resistance');
-      if(!session){session={id:cryptoId(),type:'resistance',createdAt:Date.now(),exercises:[]};list.push(session);}
+      if(!session){session={id:cryptoId(),type:'resistance',createdAt:Date.now(),p2CreatedBy:mark,exercises:[]};list.push(session);}
       session.exercises.push(...resistance);
     }
     for(const entry of d.entries){
@@ -351,7 +413,7 @@ function commit(){
     next.sessions[d.date]=list.filter(s=>s.type!=='rest');
   }
   try{
-    saveData(next);data=next;clear();message='';state.selectedDate=d.date;state.view='day';render();showToast('Workout saved to History');
+    saveData(next);data=next;recentUndo={userId:profileId,id:mark,date:d.date,expiresAt:Date.now()+60000};clear();message='';state.selectedDate=d.date;state.view='day';render();showToast('Workout saved to History');
   }catch(err){message='Workout was not fully saved. Keep LastSet open. Retry will not duplicate any set.';failure=true;render();}
 }
 function acceptSmart(){
