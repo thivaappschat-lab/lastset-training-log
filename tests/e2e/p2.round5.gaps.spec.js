@@ -183,6 +183,7 @@ test.describe('Release acceptance durable save boundaries',()=>{
     const after=await sessions(page);expect(after).toHaveLength(1);
     expect(after[0].id).toBe(before[0].id);
     expect(after[0].exercises[0].sets.map(s=>[s.weight,s.reps])).toEqual([[60,8],[62.5,8],[60,8]]);
+    await page.locator('.bottom-nav [data-nav="day"]').click();
     await page.locator('[data-edit-exercise]').click();
     await expect(page.locator('[data-set-weight="1"]')).toHaveValue('62.5');
   });
