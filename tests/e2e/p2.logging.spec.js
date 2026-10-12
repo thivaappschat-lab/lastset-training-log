@@ -66,6 +66,15 @@ async function seed(page){
  await expect(page.locator('[data-p2-entry="resistance"]')).toBeVisible();
 }
 
+// Exercise the complete P2 acceptance set twice: against the isolated candidate
+// and against deployed production using Playwright's fresh disposable contexts.
+// Each test onboards its own throwaway local profile; no real user records are read.
+for(const [acceptanceTarget,acceptanceBaseURL] of [
+ ['isolated candidate',null],
+ ['production disposable','https://lastset-training-log.thiva-claimflow.workers.dev/']
+]){
+ test.describe('P2 '+acceptanceTarget+' acceptance',()=>{
+  if(acceptanceBaseURL)test.use({baseURL:acceptanceBaseURL});
 test.describe('P2 four-category logging modes and safe source reuse',()=>{
  test('Today keeps the hero and one visible group of four correctly routed categories',async({page})=>{
   await fresh(page);
@@ -425,3 +434,6 @@ test.describe('P2 activity before recording mode',()=>{
    expect((await sessions(page)).filter(x=>x.type==='mobility')).toHaveLength(0);
  });
 });
+
+ });
+}
