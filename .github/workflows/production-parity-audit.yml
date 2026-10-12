@@ -1,0 +1,81 @@
+name: LastSet Read-Only Production Parity Audit
+on:
+  push:
+    branches: [audit/production-parity-20261012]
+    paths: ['.github/workflows/production-parity-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download immutable tested candidate
+        uses: actions/download-artifact@v4
+        with:
+          repository: thivaappschat-lab/lastset-training-log
+          run-id: 38207887649
+          github-token: ${{ github.token }}
+          name: lastset-p2-candidate-a47fa0cf1ecaf61f9bfd6acf41f8707082a1f189
+          path: ./candidate
+      - name: Verify candidate integrity
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          sha256sum -c candidate.sha256
+          node -e "const b=require('./dist/lastset-build.json');if(b.id!=='a47fa0cf1ecaf61f9bfd6acf41f8')process.exit(1)"
+      - name: Compare deployed build and every packaged asset (READ ONLY)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, pathlib, urllib.request, urllib.error, time, sys
+          base='https://lastset-training-log.thiva-claimflow.workers.dev'
+          root=pathlib.Path('candidate/dist')
+          expected='a47fa0cf1ecaf61f9bfd6acf41f8'
+          results=[]
+          def get(path):
+              url=base+'/'+path.lstrip('/')
+              req=urllib.request.Request(url,headers={'Cache-Control':'no-cache','User-Agent':'LastSet-parity-audit/1.0'})
+              for attempt in range(3):
+                  try:
+                      with urllib.request.urlopen(req,timeout=25) as resp:
+                          return resp.status,resp.headers.get('Content-Type',''),resp.read()
+                  except Exception:
+                      if attempt==2: raise
+                      time.sleep(3)
+          for f in sorted(root.rglob('*')):
+              if not f.is_file(): continue
+              rel=f.relative_to(root).as_posix()
+              local=f.read_bytes()
+              try:
+                  status,ctype,remote=get(rel+'?parity='+expected)
+                  ok=(status==200 and remote==local)
+                  results.append({'path':rel,'status':'MATCH' if ok else 'MISMATCH','http':status,'content_type':ctype,'expected_sha256':hashlib.sha256(local).hexdigest(),'live_sha256':hashlib.sha256(remote).hexdigest(),'expected_bytes':len(local),'live_bytes':len(remote)})
+              except Exception as e:
+                  results.append({'path':rel,'status':'ERROR','error':str(e)})
+          build=next((x for x in results if x['path']=='lastset-build.json'),None)
+          summary={'expected_build':expected,'total':len(results),'matched':sum(x['status']=='MATCH' for x in results),'mismatched':sum(x['status']=='MISMATCH' for x in results),'errors':sum(x['status']=='ERROR' for x in results),'build_manifest_matches':build is not None and build['status']=='MATCH','results':results}
+          pathlib.Path('production-parity-report.json').write_text(json.dumps(summary,indent=2))
+          with open('production-parity-summary.md','w') as out:
+              out.write('# LastSet production parity audit\n\n')
+              out.write('Expected build: `'+expected+'`\n\n')
+              out.write('Matched: '+str(summary['matched'])+'/'+str(summary['total'])+'; mismatched: '+str(summary['mismatched'])+'; errors: '+str(summary['errors'])+'\n\n')
+              out.write('| Asset | Result | HTTP |\n|---|---|---|\n')
+              for item in results: out.write('| '+item['path']+' | '+item['status']+' | '+str(item.get('http',''))+' |\n')
+          print('PARITY: matched',summary['matched'],'of',summary['total'],'mismatches',summary['mismatched'],'errors',summary['errors'])
+          for item in results:
+              if item['status']!='MATCH': print(item['status'],item['path'],item.get('error',''),item.get('http',''))
+          if summary['matched']!=summary['total'] or not summary['build_manifest_matches']: sys.exit(1)
+          PY
+      - name: Publish audit report (even on failure)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lastset-production-parity-report
+          path: |
+            production-parity-report.json
+            production-parity-summary.md
+          if-no-files-found: warn
