@@ -1,0 +1,40 @@
+name: LastSet Live WebKit Verification Fallback
+on:
+  push:
+    branches: ['feat/evening-quicklog-20261012']
+    paths: ['.github/workflows/p2-evening-live-webkit.yml']
+permissions:
+  contents: read
+jobs:
+  webkit-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      CI: 'true'
+      LASTSET_BASE_URL: https://lastset-training-log.thiva-claimflow.workers.dev/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check deployed LastSet version and script without pipe errors
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --max-time 30 "$LASTSET_BASE_URL/lastset-build.json" -o /tmp/lastset-build.json
+          node -e "const fs=require('fs');if(JSON.parse(fs.readFileSync('/tmp/lastset-build.json')).id!=='b2fcb4176e090183852c81b8a95c')process.exit(1)"
+          curl -fsSL --retry 3 --max-time 30 "$LASTSET_BASE_URL/lastset-p2.js" -o /tmp/lastset-p2.js
+          grep -Fq "0.21.0-dev" /tmp/lastset-p2.js
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps webkit
+      - name: Run post-release WebKit Safari-like acceptance in disposable browser context
+        run: |
+          npx playwright test tests/e2e/p2.evening-quicklog.spec.js tests/e2e/p2.logging.spec.js tests/e2e/p2.profile-confirmation.spec.js --project=mobile-webkit --retries=0 --timeout=45000 --grep 'Evening Quick Log|P2 production disposable acceptance|P2 profile confirmation'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: live-webkit-fallback-evidence
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
