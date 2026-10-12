@@ -2,7 +2,7 @@ name: LastSet Round 5 Follow-Up Live Evidence
 on:
   push:
     branches: ['qa/round5-followup-20261012']
-    paths: ['.github/workflows/round5-live-evidence.yml']
+    paths: ['.github/workflows/round5-live-evidence.yml', 'tests/e2e/p2.round5.gaps.spec.js']
 permissions:
   contents: read
 jobs:
