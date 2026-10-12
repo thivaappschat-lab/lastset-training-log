@@ -1,0 +1,78 @@
+name: LastSet P2 Live Production Parity Gate
+on:
+  push:
+    branches: [p2-redteam-20261012]
+    paths:
+      - '.github/workflows/p2-live-parity.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify-live-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Retrieve immutable tested artifact
+        uses: actions/download-artifact@v4
+        with:
+          repository: thivaappschat-lab/lastset-training-log
+          run-id: 38191353350
+          github-token: ${ github.token }}
+          name: lastset-p2-candidate-f03ddb07baf78e96bc6a5b583ebb7071ffafa6c2
+          path: ./release
+      - name: Verify local candidate hashes and release identity
+        working-directory: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum -c candidate.sha256
+          node -e "const b=require('./dist/lastset-build.json');if(b.id!=='f03ddb07baf78e96bc6a5b583ebb')process.exit(1)"
+      - name: Compare every deployed static asset byte for byte
+        working-directory: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://lastset-training-log.thiva-claimflow.workers.dev"
+          id="f03ddb07baf78e96bc6a5b583ebb"
+          matched=0
+          while IFS= read -r -d '' file; do
+            asset="${file#dist/}"
+            case "$asset" in
+              _headers|_redirects|app-v12.html) continue ;;
+            esac
+            tmp="$(mktemp)"
+            if ! curl -fsSL --retry 3 --retry-delay 1 --max-time 25 -H 'Cache-Control: no-cache' "$base/$asset?v=$id" -o "$tmp"; then
+              echo "::error::Unable to retrieve deployed asset $asset"
+              exit 1
+            fi
+            if ! cmp -s "$file" "$tmp"; then
+              echo "::error::Deployed content mismatch $asset: expected=$(wc -c < "$file") actual=$(wc -c < "$tmp")"
+              exit 1
+            fi
+            rm -f "$tmp"
+            matched=$((matched+1))
+            echo "MATCH $asset"
+          done < <(find dist -type f -print0 | sort -z)
+          echo "MATCHING_STATIC_ASSETS=$matched"
+          if [ "$matched" -lt 60 ]; then
+            echo "::error::Unexpectedly low asset count"
+            exit 1
+          fi
+      - name: Validate public navigation aliases and release markers
+        working-directory: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://lastset-training-log.thiva-claimflow.workers.dev"
+          id="f03ddb07baf78e96bc6a5b583ebb"
+          for route in / /index.html /app-v12 /app-v12.html; do
+            tmp="$(mktemp)"
+            status="$(curl -sSL --max-time 20 -o "$tmp" -w '%{http_code}' "$base$route?v=$id")"
+            if [ "$status" != 200 ]; then echo "::error::Status $status on $route"; exit 1; fi
+            if ! grep -q "$id" "$tmp"; then echo "::error::Missing release on $route"; exit 1; fi
+            echo "ROUTE_OK $route"
+            rm -f "$tmp"
+          done
+          curl -fsSL "$base/lastset-build.json" | grep -F "$id"
+          echo 'Live P2 production parity verified without modifying users.'
