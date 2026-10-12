@@ -14,6 +14,7 @@ async function today(page){await page.locator('.bottom-nav [data-nav="day"]').cl
 async function open(page,cat,mode){
  await today(page);await page.locator('[data-p2-entry="'+cat+'"]').click();
  if(cat==='resistance')await page.locator('[data-exercise="bench-press"]').click();
+ else if(cat==='cardio'||cat==='mobility')await page.locator('[data-p2-activity-choice="'+(cat==='cardio'?'Running':'Yoga')+'"]').click();
  await page.locator('[data-p2-mode="'+mode+'"]').click();
  await page.locator('[data-p2-blank]').click();
 }
