@@ -49,6 +49,8 @@ jobs:
           for f in sorted(root.rglob('*')):
               if not f.is_file(): continue
               rel=f.relative_to(root).as_posix()
+              # Cloudflare consumes these as deployment configuration, not served assets.
+              if rel in ('_headers','_redirects'): continue
               local=f.read_bytes()
               try:
                   status,ctype,remote=get(rel+'?parity='+expected)
