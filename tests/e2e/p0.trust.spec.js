@@ -66,6 +66,8 @@ test.describe('Phase 0 local-first data trust',()=>{
     expect((await stored(page)).sessions).toEqual(before.sessions);
   });
   test('offline reload keeps confirmed training records intact',async({page})=>{
+    // A slow WebKit registration is bounded, but offline and data checks must still run.
+    test.setTimeout(120_000);
     // WebKit's Playwright context.setOffline can reject a service-worker
     // response even if it contains literal cached HTML (Playwright #42775).
     // Use a dedicated origin instead. Stopping it exercises a genuine failed
@@ -95,13 +97,42 @@ test.describe('Phase 0 local-first data trust',()=>{
       await page.locator('[data-set-reps="0"]').fill('8');
       await page.locator('[data-action="save-exercise"]').click();
       const before=await stored(page);
-      // Production uses HTTPS and auto-registers. The isolated loopback
-      // origin is HTTP, so explicitly register the same service worker here.
-      await page.evaluate(async()=>{
-        const reg=await navigator.serviceWorker.register('/service-worker.js',{updateViaCache:'none'});
-        await navigator.serviceWorker.ready;
-        if(!reg.active) throw new Error('Test service worker did not activate');
+      // Loopback is a secure context. Start registration without making the
+      // Playwright evaluation wait indefinitely for WebKit's SW.ready promise.
+      // Never treat the registration request as proof of offline readiness.
+      await page.evaluate(()=>{
+        window.__p0SwProbe={phase:'registering',error:null,startedAt:Date.now()};
+        navigator.serviceWorker.register('/service-worker.js',{updateViaCache:'none'})
+          .then(reg=>{
+            window.__p0SwProbe.phase='registered';
+            window.__p0SwProbe.scope=reg.scope;
+          }).catch(error=>{
+            window.__p0SwProbe.phase='failed';
+            window.__p0SwProbe.error=String(error);
+          });
       });
+      const serviceWorkerState=async()=>page.evaluate(async()=>{
+        const probe=window.__p0SwProbe||{};
+        const registration=await Promise.race([
+          navigator.serviceWorker.getRegistration(),
+          new Promise(resolve=>setTimeout(()=>resolve(null),2500))
+        ]);
+        return {phase:probe.phase||'unknown',error:probe.error||null,
+          active:registration?.active?.state||null,
+          installing:registration?.installing?.state||null,
+          waiting:registration?.waiting?.state||null,
+          controller:Boolean(navigator.serviceWorker.controller)};
+      });
+      try {
+        await expect.poll(async()=>{
+          const status=await serviceWorkerState();
+          if(status.error)throw new Error('Service worker registration failed: '+status.error);
+          return status.active;
+        },{timeout:45000,intervals:[300,700,1000,2000]}).toBe('activated');
+      } catch(error) {
+        console.log('P0 service worker activation diagnostic:',JSON.stringify(await serviceWorkerState().catch(e=>({diagnosticError:String(e)}))));
+        throw error;
+      }
       await page.waitForFunction(async()=>{
         if(!navigator.serviceWorker)return false;
         const keys=await caches.keys();
