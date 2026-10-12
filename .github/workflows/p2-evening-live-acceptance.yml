@@ -1,0 +1,44 @@
+name: LastSet Evening Live Production Acceptance
+on:
+  push:
+    branches: ['feat/evening-quicklog-20261012']
+    paths: ['.github/workflows/p2-evening-live-acceptance.yml']
+permissions:
+  contents: read
+jobs:
+  production-disposable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [mobile-chromium, mobile-webkit]
+    env:
+      CI: 'true'
+      LASTSET_BASE_URL: https://lastset-training-log.thiva-claimflow.workers.dev/
+      EXPECTED_BUILD: b2fcb4176e090183852c81b8a95c
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Require the approved build is live before browser acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --max-time 30 -H 'Cache-Control: no-cache' "$LASTSET_BASE_URL/lastset-build.json" | grep -F "$EXPECTED_BUILD"
+          curl -fsSL --retry 3 --max-time 30 -H 'Cache-Control: no-cache' "$LASTSET_BASE_URL/lastset-p2.js?v=$EXPECTED_BUILD" | grep -Fq "0.21.0-dev"
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Test actual production with isolated disposable browser storage
+        run: |
+          npx playwright test tests/e2e/p2.evening-quicklog.spec.js tests/e2e/p2.logging.spec.js tests/e2e/p2.profile-confirmation.spec.js --project=${{ matrix.browser }} --retries=0 --timeout=45000 --grep 'Evening Quick Log|P2 production disposable acceptance|P2 profile confirmation'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lastset-evening-live-${{ matrix.browser }}
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
