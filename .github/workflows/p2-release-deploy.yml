@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 25
     env:
       CLOUDFLARE_ACCOUNT_ID: d04b8160bdf0f3df7658ea6c7b2161d7
-      CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
       EXPECTED_BUILD: f03ddb07baf78e96bc6a5b583ebb
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +36,7 @@ jobs:
           fi
       - name: Verify both browser gate runs green at identical source commit
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -76,7 +76,7 @@ jobs:
         with:
           repository: thivaappschat-lab/lastset-training-log
           run-id: 38191353350
-          github-token: \${{ github.token }}
+          github-token: ${{ github.token }}
           name: lastset-p2-candidate-f03ddb07baf78e96bc6a5b583ebb7071ffafa6c2
           path: ./release
       - name: Verify SHA256 and build identity before publishing
