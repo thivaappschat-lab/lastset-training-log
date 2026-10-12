@@ -26,6 +26,8 @@ async function pinCardio(page){
  page.once('dialog',dialog=>dialog.accept('2 km incline treadmill'));
  await page.locator('[data-p2-pin-favorite]').click();
  expect((await db(page)).p2Presets.filter(p=>p.pinned)).toHaveLength(1);
+ page.once('dialog',dialog=>dialog.accept());
+ await page.locator('[data-p2-discard]').click();
  await page.locator('.bottom-nav [data-nav="day"]').click();
  await expect(page.locator('[data-p2-favorite]')).toHaveCount(1);
 }
