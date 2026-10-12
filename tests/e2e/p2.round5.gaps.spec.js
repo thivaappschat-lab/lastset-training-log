@@ -158,3 +158,75 @@ test('Live offline save retains the exact record after reconnect and reload', as
     await context.setOffline(false);
   }
 });
+
+// Release acceptance additions: every test uses a fresh disposable browser context.
+test.describe('Release acceptance durable save boundaries',()=>{
+  test('manual resistance save edit and reopen preserves all completed sets',async({page})=>{
+    await fresh(page);
+    await page.locator('[data-p2-entry="resistance"]').click();
+    await page.locator('[data-exercise="bench-press"]').click();
+    await page.locator('[data-p2-mode="quick"]').click();
+    await page.locator('[data-p2-blank]').click();
+    await page.locator('[data-p2-add-weight="0"]').fill('60');
+    await page.locator('[data-p2-add-reps="0"]').fill('8');
+    await page.locator('[data-p2-add-count="0"]').fill('3');
+    await page.locator('[data-p2-add-set="0"]').click();
+    await page.locator('[data-p2-finish]').click();
+    expect(await sessions(page)).toHaveLength(0);
+    await page.locator('[data-p2-commit]').click();
+    const before=await sessions(page);expect(before).toHaveLength(1);
+    await page.locator('[data-edit-exercise]').click();
+    await page.locator('[data-set-weight="1"]').fill('62.5');
+    await page.locator('[data-action="save-exercise"]').click();
+    await page.reload({waitUntil:'domcontentloaded'});
+    await expect(page.locator('.bottom-nav')).toBeVisible();
+    const after=await sessions(page);expect(after).toHaveLength(1);
+    expect(after[0].id).toBe(before[0].id);
+    expect(after[0].exercises[0].sets.map(s=>[s.weight,s.reps])).toEqual([[60,8],[62.5,8],[60,8]]);
+    await page.locator('[data-edit-exercise]').click();
+    await expect(page.locator('[data-set-weight="1"]')).toHaveValue('62.5');
+  });
+  test('offline new cardio and mobility saves survive reconnect and reload without duplication',async({page,context})=>{
+    await fresh(page);
+    await context.setOffline(true);
+    await choose(page,'cardio','Cycling');
+    await page.locator('[data-p2-field="cardio.duration"]').fill('25');
+    await page.locator('[data-p2-finish]').click();
+    await page.locator('[data-p2-commit]').click();
+    await choose(page,'mobility','Yoga');
+    await page.locator('[data-p2-field="mobility.duration"]').fill('15');
+    await page.locator('[data-p2-finish]').click();
+    await page.locator('[data-p2-commit]').click();
+    const saved=await sessions(page);expect(saved).toHaveLength(2);
+    expect(saved.map(s=>[s.type,s.duration])).toEqual([['cardio',25],['mobility',15]]);
+    await context.setOffline(false);
+    await page.reload({waitUntil:'domcontentloaded'});
+    await expect(page.locator('.bottom-nav')).toBeVisible();
+    expect(await sessions(page)).toEqual(saved);
+    await page.reload({waitUntil:'domcontentloaded'});
+    expect(await sessions(page)).toEqual(saved);
+  });
+  test('Smart Log missing reps require review and repeated confirm saves once across reload',async({page})=>{
+    await fresh(page);
+    await page.locator('[data-p2-entry="smart"]').click();
+    await page.locator('[data-p2-mode="quick"]').click();
+    await page.locator('[data-p2-blank]').click();
+    await page.locator('#ai-text').fill('Overhead press 60x5 then 55 amrap');
+    await page.locator('[data-action="parse-ai"]').click();
+    await expect(page.locator('.ls-mobile-review')).toBeVisible();
+    expect(await sessions(page)).toHaveLength(0);
+    await expect(page.locator('[data-mobile-fix-next]')).toBeVisible();
+    await page.locator('[data-mobile-open="0"]').click();
+    await page.locator('[data-p1-reps="0:1"]').fill('7');
+    await page.locator('[data-p1-reps="0:1"]').blur();
+    await page.locator('[data-p1-ack="0"]').check();
+    await page.locator('[data-mobile-sheet-close]').first().click();
+    await expect(page.locator('[data-action="confirm-ai-workout"]')).toBeEnabled();
+    expect(await sessions(page)).toHaveLength(0);
+    await page.evaluate(()=>{const button=document.querySelector('[data-action="confirm-ai-workout"]');button.click();button.click();});
+    await page.reload({waitUntil:'domcontentloaded'});
+    await expect(page.locator('.bottom-nav')).toBeVisible();
+    const saved=await sessions(page);expect(saved).toHaveLength(1);
+    expect(saved[0].exercises[0].sets.map(s=>[s.weight,s.reps])).toEqual([[60,5],[55,7]]);
+  });
+});
