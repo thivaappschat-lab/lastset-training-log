@@ -97,12 +97,34 @@ jobs:
           done
           echo "ARTWORK_IDENTICAL=$count"
           test "$count" -ge 5
-      - name: Deploy approved LastSet evening candidate
+      - name: Deploy approved LastSet evening candidate with bounded retries
         id: deploy
         shell: bash
         run: |
           set -euo pipefail
-          npx --yes wrangler@4 deploy --config wrangler.jsonc
+          for attempt in 1 2 3; do
+            echo "Wrangler deploy attempt $attempt of 3"
+            if npx --yes wrangler@4 deploy --config wrangler.jsonc; then
+              echo "Cloudflare deployment command succeeded."
+              exit 0
+            fi
+            # Cloudflare API timeouts can occur even when the request reached the origin.
+            # Do not re-deploy when the newly stamped build is already live.
+            current="$(curl -fsSL --retry 2 --max-time 30 -H 'Cache-Control: no-cache' "$BASE/lastset-build.json" || true)"
+            if printf '%s' "$current" | grep -Fq "$LASTSET_RELEASE_ID"; then
+              echo "New build is already live after a CLI timeout; continue parity audit."
+              exit 0
+            fi
+            if ! printf '%s' "$current" | grep -Fq "$OLD_BUILD"; then
+              echo "::error::Production is not on either expected build, refusing another deployment."
+              exit 1
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::Cloudflare API failed after three guarded deploy attempts."
+              exit 1
+            fi
+            sleep $((attempt * 20))
+          done
       - name: Verify new production build and all served release assets
         id: verify
         shell: bash
