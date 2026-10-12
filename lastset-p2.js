@@ -9,7 +9,7 @@ const catNames={resistance:'Resistance',cardio:'Cardio',mobility:'Mobility & Rec
 const modes={quick:['Log & Finish','Enter completed training and save'],free:['Log As I Go','Log without a timer'],timed:['Log With Timer','Optional rest countdown or stopwatch']};
 const cardioNames=['Running','Treadmill','Walking','Cycling','Stationary Bike','Rowing','Swimming','Elliptical','Stair Climb','Stair Machine'];
 const mobilityNames=['Yoga','Pilates','Stretching','Mobility Drills','Foam Rolling'];
-let category='resistance',mode='quick',draft=null,sourceTab='previous',message='',failure=false,exerciseSearch='',selectedResistanceExercise='',resistanceBrowsing=false;
+let category='resistance',mode='quick',draft=null,sourceTab='previous',selectedActivity='',message='',failure=false,exerciseSearch='',selectedResistanceExercise='',resistanceBrowsing=false;
 function identity(){return String(data?.profile?.userId||'unregistered');}
 function oldKey(){return PREFIX+identity().replace(/[^a-z0-9_-]/ig,'_').slice(0,80);}
 function key(cat=category){return oldKey()+':'+cat;}
@@ -42,8 +42,8 @@ function begin(source){
   draft={version:1,id:cryptoId(),userId,date:cleanDate(),category,mode,status:'active',
     startAt:Date.now(),pausedAt:null,pausedMs:0,restUntil:0,restSeconds:90,
     source:source?.label||'',copied:!!source,confirmed:!source,exercises:[],entries:[],
-    currentExerciseId:'',cardio:{activity:'Running',duration:'',distance:'',incline:'',notes:''},
-    mobility:{activity:'Yoga',style:'General Yoga',duration:'',intensity:'Gentle',notes:''},
+    currentExerciseId:'',cardio:{activity:category==='cardio'&&selectedActivity?selectedActivity:'Running',duration:'',distance:'',incline:'',notes:''},
+    mobility:{activity:category==='mobility'&&selectedActivity?selectedActivity:'Yoga',style:'General Yoga',duration:'',intensity:'Gentle',notes:''},
     smartText:'',smartCandidate:null};
   if(source?.kind==='historical'){
     for(const s of source.sessions||[]){
@@ -98,13 +98,15 @@ function begin(source){
 }
 function sourceRecords(){
   return Object.entries(data.sessions||{}).filter(([date])=>date<cleanDate()).sort((a,b)=>b[0].localeCompare(a[0])).flatMap(([date,records])=>{
-    const sessions=(records||[]).filter(s=>s.type!=='rest'&&(category==='smart'||s.type===category));
+    const sessions=(records||[]).filter(s=>s.type!=='rest'&&(category==='smart'||s.type===category)&&
+      (!selectedActivity||category==='resistance'||category==='smart'||(s.activity||(category==='cardio'?'Running':'Yoga'))===selectedActivity));
     return sessions.length?[{kind:'historical',date,label:'Previous day · '+date,sessions:clone(sessions)}]:[];
   }).slice(0,35);
 }
 function savedRecords(){
   const templates=(data.templates||[]).filter(t=>Array.isArray(t.exerciseIds)&&t.exerciseIds.length);
-  const presets=(data.p2Presets||[]).filter(p=>p.category===category);
+  const presets=(data.p2Presets||[]).filter(p=>p.category===category&&
+    (!selectedActivity||(p.values?.activity||(category==='cardio'?'Running':'Yoga'))===selectedActivity));
   return [
     ...(category==='resistance'||category==='smart'?templates.map(t=>({kind:'template',label:t.name||'Saved Workout',template:t})):[]),
     ...presets.map(p=>({kind:'preset',label:p.name,preset:p}))
@@ -113,14 +115,22 @@ function savedRecords(){
 function pageHeading(title,sub){
   return '<main class="container ls-p2"><div class="ls-p2-page-head"><button class="ls-p2-back" data-p2-back type="button" aria-label="Back">‹</button><div><div class="ls-p2-kicker">LASTSET TRAINING</div><h2>'+esc(title)+'</h2><p>'+esc(sub||'')+'</p></div></div>';
 }
+function activityScreen(){
+  const options=category==='cardio'?cardioNames:mobilityNames;
+  return pageHeading('Choose '+(category==='cardio'?'cardio':'mobility & recovery')+' type',
+    'Select your activity before choosing how to record it.')+
+    '<div class="ls-p2-activity-grid">'+options.map(name=>'<button type="button" data-p2-activity-choice="'+esc(name)+'"><strong>'+esc(name)+'</strong><b aria-hidden="true">›</b></button>').join('')+'</div>'+
+    '<div class="ls-p2-note">Next you can log completed activity, record as you go without a timer, or use an optional timer.</div></main>';
+}
 function modeScreen(){
-  return pageHeading(category==='resistance'&&selectedResistanceExercise?(EXERCISES.find(e=>e.id===selectedResistanceExercise)?.name||catNames[category]):catNames[category],category==='resistance'?'Choose how to log this exercise. Timers optional.':'How would you like to log?')+
+  const title=category==='resistance'&&selectedResistanceExercise?(EXERCISES.find(e=>e.id===selectedResistanceExercise)?.name||catNames[category]):selectedActivity||catNames[category];
+  return pageHeading(title,category==='resistance'?'Choose how to log this exercise. Timers optional.':'How would you like to log '+(selectedActivity||'this activity')+'?')+
     '<div class="ls-p2-modes">'+Object.entries(modes).map(([m,[label,description]])=>'<button class="ls-p2-mode" data-p2-mode="'+m+'"><span class="ls-p2-mode-icon">'+({quick:'✓',free:'🏋',timed:'◷'}[m])+'</span><span><strong>'+label+'</strong><small>'+description+'</small></span><b>›</b></button>').join('')+'</div>'+
     '<div class="ls-p2-note">Your existing quick log stays available. Timers are never required.</div></main>';
 }
 function sourceScreen(){
   const records=sourceTab==='previous'?sourceRecords():savedRecords();
-  return pageHeading('Start '+catNames[category],modes[mode][0])+
+  return pageHeading('Start '+(selectedActivity||catNames[category]),modes[mode][0])+
     '<button class="primary" data-p2-blank>＋ Start fresh</button>'+
     '<div class="ls-p2-note">Copying gives you an editable draft. Previous performance is not automatically counted as completed.</div>'+
     '<div class="ls-p2-tabbar"><button class="'+(sourceTab==='previous'?'selected':'')+'" data-p2-source-tab="previous">Previous days</button><button class="'+(sourceTab==='saved'?'selected':'')+'" data-p2-source-tab="saved">Saved workouts</button></div>'+
@@ -215,7 +225,7 @@ function finishScreen(){
    (message?'<p class="ls-p2-message" role="alert">'+esc(message)+'</p>':'')+
    '<button class="primary" data-p2-commit>✓ Confirm and save to History</button><button class="secondary" data-p2-export>Export draft backup</button><button class="secondary" data-p2-return>Edit workout</button></main>';
 }
-function p2Screen(){return state.view==='p2-mode'?modeScreen():state.view==='p2-sources'?sourceScreen():state.view==='p2-workout'?workoutScreen():finishScreen();}
+function p2Screen(){return state.view==='p2-activity'?activityScreen():state.view==='p2-mode'?modeScreen():state.view==='p2-sources'?sourceScreen():state.view==='p2-workout'?workoutScreen():finishScreen();}
 function decorateToday(){
   if(state.view!=='day'||!data.profile?.onboardingComplete)return;
   const main=document.querySelector('main.container');if(!main||main.querySelector('[data-p2-today]'))return;
@@ -241,9 +251,15 @@ function go(v){message='';state.view=v;render();}
 function open(id){
   if(!Object.hasOwn(catNames,id))return;
   if(draft&&!persist())return;
-  category=id;draft=null;mode='quick';sourceTab='previous';exerciseSearch='';selectedResistanceExercise='';resistanceBrowsing=false;
+  category=id;draft=null;mode='quick';sourceTab='previous';selectedActivity='';exerciseSearch='';selectedResistanceExercise='';resistanceBrowsing=false;
   if(id==='resistance'){globalThis.LastSetNavigation?.pushCurrent?.();resistanceBrowsing=true;go('exercise-list');return;}
   if(active()){go('p2-workout');return;}
+  go(id==='cardio'||id==='mobility'?'p2-activity':'p2-mode');
+}
+function chooseActivity(name){
+  const options=category==='cardio'?cardioNames:category==='mobility'?mobilityNames:[];
+  if(!options.includes(name))return;
+  selectedActivity=name;
   go('p2-mode');
 }
 function chooseMode(id){
@@ -368,7 +384,7 @@ function parseSmart(){
   }catch(err){message='Could not interpret the description. Your text is retained.';render();}
 }
 const oldScreen=screen;
-screen=function(){return /^p2-(mode|sources|workout|finish)$/.test(state.view)?p2Screen():oldScreen();};
+screen=function(){return /^p2-(activity|mode|sources|workout|finish)$/.test(state.view)?p2Screen():oldScreen();};
 const oldRender=render;
 render=function(){oldRender();decorateToday();document.documentElement.dataset.lastsetP2=V;};
 document.addEventListener('click',e=>{
@@ -381,14 +397,19 @@ document.addEventListener('click',e=>{
        selectedResistanceExercise=ex.id;resistanceBrowsing=false;go('p2-mode');return;
      }
    }
-  const el=e.target.closest?.('[data-p2-entry],[data-p2-resume],[data-p2-mark-rest],[data-p2-mode],[data-p2-back],[data-p2-blank],[data-p2-source-tab],[data-p2-source],[data-p2-change-mode],[data-p2-toggle-ex],[data-p2-remove-ex],[data-p2-add-set],[data-p2-remove-set],[data-p2-exercise],[data-p2-add-activity],[data-p2-remove-entry],[data-p2-parse],[data-p2-accept-smart],[data-p2-finish],[data-p2-return],[data-p2-commit],[data-p2-discard],[data-p2-skip-rest],[data-p2-pause],[data-p2-retry],[data-p2-export],[data-p2-save-preset]');
+  const el=e.target.closest?.('[data-p2-entry],[data-p2-resume],[data-p2-mark-rest],[data-p2-activity-choice],[data-p2-mode],[data-p2-back],[data-p2-blank],[data-p2-source-tab],[data-p2-source],[data-p2-change-mode],[data-p2-toggle-ex],[data-p2-remove-ex],[data-p2-add-set],[data-p2-remove-set],[data-p2-exercise],[data-p2-add-activity],[data-p2-remove-entry],[data-p2-parse],[data-p2-accept-smart],[data-p2-finish],[data-p2-return],[data-p2-commit],[data-p2-discard],[data-p2-skip-rest],[data-p2-pause],[data-p2-retry],[data-p2-export],[data-p2-save-preset]');
   if(!el)return;e.preventDefault();e.stopImmediatePropagation();
   const d=active(),i=Number(el.dataset.p2ToggleEx||el.dataset.p2RemoveEx||el.dataset.p2AddSet||0);
   if(el.dataset.p2Entry)open(el.dataset.p2Entry);
   else if(el.hasAttribute('data-p2-resume')){if(draft&&!persist())return;category=el.dataset.p2Resume;draft=null;go('p2-workout');}
    else if(el.hasAttribute('data-p2-mark-rest')){if(typeof dayAction==='function')dayAction('rest');}
+  else if(el.hasAttribute('data-p2-activity-choice'))chooseActivity(el.dataset.p2ActivityChoice);
   else if(el.dataset.p2Mode)chooseMode(el.dataset.p2Mode);
-  else if(el.hasAttribute('data-p2-back')){if(state.view==='p2-mode'&&category==='resistance'&&selectedResistanceExercise){resistanceBrowsing=true;go('exercise-list');}else go(state.view==='p2-mode'?'day':state.view==='p2-sources'?'p2-mode':state.view==='p2-finish'?'p2-workout':'day');}
+  else if(el.hasAttribute('data-p2-back')){
+    if(state.view==='p2-mode'&&category==='resistance'&&selectedResistanceExercise){resistanceBrowsing=true;go('exercise-list');}
+    else if(state.view==='p2-mode'&&(category==='cardio'||category==='mobility'))go('p2-activity');
+    else go(state.view==='p2-sources'?'p2-mode':state.view==='p2-finish'?'p2-workout':'day');
+  }
   else if(el.hasAttribute('data-p2-blank'))begin(null);
   else if(el.dataset.p2SourceTab){sourceTab=el.dataset.p2SourceTab;render();}
   else if(el.hasAttribute('data-p2-source')){const x=(sourceTab==='previous'?sourceRecords():savedRecords())[Number(el.dataset.p2Source)];if(x)begin(x);}
