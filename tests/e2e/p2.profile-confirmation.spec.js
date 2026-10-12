@@ -22,10 +22,10 @@ async function stored(page){
 test.describe('P2 profile confirmation and persistence',()=>{
   test('@critical older notification cannot dismiss a newer confirmed profile save',async({page})=>{
     await fresh(page);
-    await page.locator('#profile-name').fill('Alpha QA');
-    await page.locator('#profile-weight-unit').selectOption('lb');
     await page.evaluate(()=>showToast('Earlier event'));
     await page.waitForTimeout(1100);
+    await page.locator('#profile-name').fill('Alpha QA');
+    await page.locator('#profile-weight-unit').selectOption('lb');
     await page.locator('[data-action="save-profile"]').click();
     await expect(page.locator('.toast')).toContainText('Profile saved');
     await page.waitForTimeout(2100);
@@ -72,7 +72,7 @@ test.describe('P2 profile confirmation and persistence',()=>{
       };
     });
     await page.locator('[data-action="save-profile"]').click();
-    await expect(page.locator('.toast')).not.toContainText('Profile saved');
+    await expect(page.locator('.toast').filter({hasText:'Profile saved'})).toHaveCount(0);
     await expect(page.locator('#ls-save-failure')).toBeVisible();
     await page.evaluate(()=>{Storage.prototype.setItem=window.__profileOriginalSetItem});
     const after=await stored(page);
