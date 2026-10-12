@@ -1,0 +1,38 @@
+name: LastSet Activity-First Live Smoke
+on:
+  push:
+    branches: [p2-redteam-20261012]
+    paths:
+      - '.github/workflows/p2-activity-live-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live-activity-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [mobile-chromium, mobile-webkit]
+    env:
+      CI: 'true'
+      LASTSET_BASE_URL: https://lastset-training-log.thiva-claimflow.workers.dev/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Verify activity picker precedes timer and saved records survive
+        run: npx playwright test tests/e2e/p2.logging.spec.js --project=${{ matrix.browser }} --retries=0 --timeout=45000 --grep 'P2 activity before recording mode|quick cardio logs duration|mobility quick records yoga|cardio as-I-go without timer|copied cardio and mobility previous records'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: p2-activity-live-evidence-${{ matrix.browser }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
