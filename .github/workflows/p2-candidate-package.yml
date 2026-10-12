@@ -1,0 +1,43 @@
+name: LastSet P2 Candidate Package
+on:
+  push:
+    branches: [p2-redteam-20261012]
+    paths:
+      - '.github/workflows/p2-candidate-package.yml'
+      - 'index.html'
+      - 'lastset-*.js'
+      - 'lastset-*.css'
+      - 'service-worker.js'
+      - 'worker.js'
+      - 'build-cloudflare.sh'
+      - 'assets/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Compile exact branch release assets
+        run: bash build-cloudflare.sh
+      - name: Verify manifest and integrity
+        run: |
+          node --check worker.js
+          node --check dist/service-worker.js
+          node -e "const m=require('./dist/lastset-build.json');if(!m.id||m.id!==process.env.GITHUB_SHA.slice(0,28))process.exit(1)"
+          sha256sum dist/index.html dist/lastset-p2.js dist/lastset-p2.css dist/service-worker.js worker.js > candidate.sha256
+      - name: Upload complete P2 candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: lastset-p2-candidate-${{ github.sha }}
+          path: |
+            dist/
+            worker.js
+            wrangler.jsonc
+            candidate.sha256
+          retention-days: 14
+          if-no-files-found: error
