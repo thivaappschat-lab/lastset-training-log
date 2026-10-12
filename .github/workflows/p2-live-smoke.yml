@@ -1,0 +1,40 @@
+name: LastSet P2 Live Disposable Profile Smoke
+on:
+  push:
+    branches: [p2-redteam-20261012]
+    paths:
+      - '.github/workflows/p2-live-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [mobile-chromium, mobile-webkit]
+    env:
+      CI: 'true'
+      LASTSET_BASE_URL: https://lastset-training-log.thiva-claimflow.workers.dev/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Verify live LastSet P2 without touching existing user profiles
+        shell: bash
+        run: |
+          npx playwright test tests/e2e/p0.trust.spec.js tests/e2e/p2.profile-confirmation.spec.js tests/e2e/lastset.production.spec.js --project=${{ matrix.browser }} --retries=0 --timeout=60000 --grep 'three progressive manual sets survive reload unchanged|backup restores into new profile without overwriting newer workouts|quota failure shows emergency backup|older notification cannot dismiss a newer confirmed profile save|rapid consecutive saves persist only the latest values|failed profile storage never displays saved success|two test users keep bodyweight and workout history isolated|Yoga saves, edits and tracks as mobility without changing cardio totals'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: lastset-live-smoke-${{ matrix.browser }}
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
