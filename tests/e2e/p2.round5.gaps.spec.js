@@ -95,7 +95,7 @@ test.describe('Round 5 post-independent-report focused production validation',()
     await expect(page.locator('[data-p2-field="cardio.distance"]')).toHaveValue('8.5');
     await page.locator('[data-p2-confirm-copy]').check();
     await page.locator('[data-p2-finish]').click();
-    await page.locator('[data-p2-commit]').dblclick({delay:20});
+    await page.evaluate(()=>{const button=document.querySelector('[data-p2-commit]');button.click();button.click();});
     const result=(await sessions(page)).filter(s=>s.type==='cardio');
     expect(result).toHaveLength(1);
     expect([result[0].activity,result[0].duration,result[0].distance]).toEqual(['Cycling',32,8.5]);
