@@ -120,3 +120,40 @@ test.describe('Round 5 post-independent-report focused production validation',()
     await expect(page.locator('[data-p2-favorite]')).toHaveCount(0);
   });
 });
+// Reuse the established regression assertions against this workflow's live URL.
+// Playwright creates a new disposable browser context for every test.
+require('./p1.smartlog.spec.js');
+require('./lastset.production.spec.js');
+require('./p2.profile-confirmation.spec.js');
+require('./p2.evening-quicklog.spec.js');
+
+test('Live offline save retains the exact record after reconnect and reload', async ({page, context, browserName}) => {
+  await fresh(page);
+  await choose(page, 'cardio', 'Cycling');
+  await page.locator('[data-p2-field="cardio.duration"]').fill('27');
+  await page.locator('[data-p2-field="cardio.distance"]').fill('7.25');
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+  await context.setOffline(true);
+  try {
+    await page.locator('[data-p2-finish]').click();
+    expect(await sessions(page)).toHaveLength(0);
+    await page.locator('[data-p2-commit]').click();
+    const saved = await sessions(page);
+    expect(saved).toHaveLength(1);
+    expect([saved[0].type, saved[0].duration, saved[0].distance]).toEqual(['cardio', 27, 7.25]);
+    // Chromium supports offline service-worker navigation. WebKit's network
+    // emulation limitation is covered separately by the server-stop test.
+    if (browserName === 'chromium') {
+      await page.reload({waitUntil:'domcontentloaded'});
+      await expect(page.locator('.bottom-nav')).toBeVisible();
+      expect(await sessions(page)).toEqual(saved);
+    }
+    await context.setOffline(false);
+    await page.reload({waitUntil:'domcontentloaded'});
+    await expect(page.locator('.bottom-nav')).toBeVisible();
+    expect(await sessions(page)).toEqual(saved);
+  } finally {
+    await context.setOffline(false);
+  }
+});
