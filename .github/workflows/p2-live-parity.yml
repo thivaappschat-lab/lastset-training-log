@@ -18,7 +18,7 @@ jobs:
         with:
           repository: thivaappschat-lab/lastset-training-log
           run-id: 38191353350
-          github-token: ${ github.token }}
+          github-token: ${{ github.token }}
           name: lastset-p2-candidate-f03ddb07baf78e96bc6a5b583ebb7071ffafa6c2
           path: ./release
       - name: Verify local candidate hashes and release identity
