@@ -417,6 +417,9 @@ test.describe('P2 activity before recording mode',()=>{
    await expect(page.locator('[data-p2-field="mobility.activity"]')).toHaveValue('Stretching');
    await expect(page.locator('[data-p2-elapsed]')).toBeVisible();
    await page.reload({waitUntil:'domcontentloaded'});
+   await expect.poll(async()=>page.evaluate(()=>globalThis.LastSetP2.loadDraft('mobility')?.mobility.activity)).toBe('Stretching');
+   await page.locator('.bottom-nav [data-nav="day"]').click();
+   await expect(page.locator('[data-p2-resume="mobility"]')).toBeVisible();
    await page.locator('[data-p2-resume="mobility"]').click();
    await expect(page.locator('[data-p2-field="mobility.activity"]')).toHaveValue('Stretching');
    expect((await sessions(page)).filter(x=>x.type==='mobility')).toHaveLength(0);
