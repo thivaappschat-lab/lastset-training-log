@@ -27,7 +27,8 @@ jobs:
         run: |
           set -euo pipefail
           curl -fsSL --retry 3 --max-time 30 -H 'Cache-Control: no-cache' "$LASTSET_BASE_URL/lastset-build.json" | grep -F "$EXPECTED_BUILD"
-          curl -fsSL --retry 3 --max-time 30 -H 'Cache-Control: no-cache' "$LASTSET_BASE_URL/lastset-p2.js?v=$EXPECTED_BUILD" | grep -Fq "0.21.0-dev"
+          curl -fsSL --retry 3 --max-time 30 -H 'Cache-Control: no-cache' "$LASTSET_BASE_URL/lastset-p2.js?v=$EXPECTED_BUILD" -o /tmp/lastset-live-p2.js
+          grep -Fq "0.21.0-dev" /tmp/lastset-live-p2.js
       - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium webkit
       - name: Test actual production with isolated disposable browser storage
