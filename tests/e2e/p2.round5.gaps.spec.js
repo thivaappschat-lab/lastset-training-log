@@ -93,8 +93,11 @@ test.describe('Round 5 post-independent-report focused production validation',()
     await page.locator('[data-p2-change-mode="free"]').click();
     await expect(page.locator('[data-p2-change-mode="free"]')).toHaveClass(/active/);
     await expect(page.locator('[data-p2-field="cardio.distance"]')).toHaveValue('8.5');
-    await page.locator('[data-p2-confirm-copy]').check();
+    // Log As I Go supports multiple completed activities: explicitly add the current one.
+    await page.locator('[data-p2-add-activity]').click();
+    await expect(page.locator('.ls-p2-source')).toContainText('Cycling');
     await page.locator('[data-p2-finish]').click();
+    await expect(page.locator('[data-p2-commit]')).toBeVisible();
     await page.evaluate(()=>{const button=document.querySelector('[data-p2-commit]');button.click();button.click();});
     const result=(await sessions(page)).filter(s=>s.type==='cardio');
     expect(result).toHaveLength(1);
