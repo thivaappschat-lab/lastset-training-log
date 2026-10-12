@@ -1,0 +1,44 @@
+name: LastSet Round 5 Follow-Up Live Evidence
+on:
+  push:
+    branches: ['qa/round5-followup-20261012']
+    paths: ['.github/workflows/round5-live-evidence.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [mobile-chromium, mobile-webkit]
+    env:
+      CI: 'true'
+      LASTSET_BASE_URL: https://lastset-training-log.thiva-claimflow.workers.dev/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Confirm expected live build and code; never touch real profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --max-time 30 "$LASTSET_BASE_URL/lastset-build.json" -o /tmp/build.json
+          node -e "const fs=require('fs');if(JSON.parse(fs.readFileSync('/tmp/build.json')).id!=='b2fcb4176e090183852c81b8a95c')process.exit(1)"
+          curl -fsSL --retry 3 --max-time 30 "$LASTSET_BASE_URL/lastset-p2.js" -o /tmp/p2.js
+          grep -Fq "0.21.0-dev" /tmp/p2.js
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps ${{ matrix.browser == 'mobile-webkit' && 'webkit' || 'chromium' }}
+      - name: Test Round 5 specific risks in disposable browser context
+        run: npx playwright test tests/e2e/p2.round5.gaps.spec.js --project=${{ matrix.browser }} --retries=0 --timeout=45000
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: round5-live-evidence-${{ matrix.browser }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
