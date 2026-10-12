@@ -578,7 +578,18 @@ function cryptoId(){
   return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
 }
 function sessionsFor(date){ return data.sessions[date] || []; }
-function showToast(msg){ state.toast=msg; render(); setTimeout(()=>{state.toast=''; render();},1600); }
+let lastsetToastSequence=0;
+function showToast(msg){
+  // An older notice may not dismiss a newer confirmation, including profile saves.
+  const sequence=++lastsetToastSequence;
+  state.toast=msg;
+  render();
+  setTimeout(()=>{
+    if(sequence!==lastsetToastSequence||state.toast!==msg)return;
+    state.toast='';
+    render();
+  },3200);
+}
 
 function render(){
   const app = document.getElementById('app');
