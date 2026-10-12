@@ -1,12 +1,13 @@
 name: LastSet P2 Red Team Nightly Gate
 on:
   push:
-    branches: [p2-redteam-20261012]
+    branches: [p2-redteam-20261012, 'feat/evening-quicklog-20261012']
     paths:
       - 'index.html'
       - 'tests/e2e/p2.redteam.spec.js'
       - 'tests/e2e/p2.extended.spec.js'
       - 'tests/e2e/p2.logging.spec.js'
+      - 'tests/e2e/p2.evening-quicklog.spec.js'
       - 'tests/e2e/p2.profile-confirmation.spec.js'
       - 'lastset-p2.js'
       - 'lastset-p2.css'
@@ -44,7 +45,7 @@ jobs:
           cat /tmp/lastset-redteam.log
           exit 1
       - name: P2 red team and existing regression suite
-        run: npx playwright test tests/e2e/p2.logging.spec.js tests/e2e/p2.redteam.spec.js tests/e2e/p2.profile-confirmation.spec.js tests/e2e/p2.extended.spec.js --project=${{ matrix.browser }} --retries=0 --timeout=40000
+        run: npx playwright test tests/e2e/p2.logging.spec.js tests/e2e/p2.evening-quicklog.spec.js tests/e2e/p2.redteam.spec.js tests/e2e/p2.profile-confirmation.spec.js tests/e2e/p2.extended.spec.js --project=${{ matrix.browser }} --retries=0 --timeout=40000
       - uses: actions/upload-artifact@v4
         if: always()
         with:

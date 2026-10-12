@@ -93,3 +93,38 @@
 .ls-p2-activity-grid b{font-size:20px;color:var(--muted);flex:none}
 .ls-p2-activity-grid button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media(max-width:360px){.ls-p2-activity-grid{gap:7px}.ls-p2-activity-grid button{padding:11px 9px}}
+
+
+/* Evening acceptance: favorites sit directly below the four category tiles. */
+.ls-p2-quick{margin:17px 0 14px;display:grid;gap:9px}
+.ls-p2-quick .ls-p2-section-title{margin-bottom:0}
+.ls-p2-favorites{display:grid;gap:9px}
+.ls-p2-favorite{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;min-width:0}
+.ls-p2-favorite-open{display:flex;align-items:center;gap:11px;width:100%;padding:14px;border:0;background:transparent;text-align:left;color:var(--ink)}
+.ls-p2-favorite-open>span:nth-child(2){flex:1;min-width:0}
+.ls-p2-favorite-open strong,.ls-p2-favorite-open small{display:block}
+.ls-p2-favorite-open strong{font-size:13px;font-weight:800}
+.ls-p2-favorite-open small{margin-top:5px;font-size:11px;color:var(--muted);line-height:1.4;overflow-wrap:anywhere}
+.ls-p2-favorite-icon{width:38px;height:38px;flex:none;display:grid;place-items:center;border-radius:12px;background:var(--accent-soft);font-size:21px}
+.ls-p2-favorite-open>b{font-size:20px;color:var(--muted)}
+.ls-p2-favorite-tools{display:flex;align-items:center;gap:5px;padding:0 10px 9px;flex-wrap:wrap}
+.ls-p2-favorite-tools button{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:11px;min-height:31px;padding:5px 9px}
+.ls-p2-favorite-tools button:disabled{opacity:.35}
+.ls-p2-quick-empty{font-size:12px;line-height:1.5;color:var(--muted);padding:12px;background:var(--surface-2);border-radius:12px}
+.ls-p2-quick-create{border:1px solid var(--line);border-radius:13px;background:var(--surface)}
+.ls-p2-quick-create>summary{padding:12px 13px;cursor:pointer;font-size:12px;font-weight:800;list-style-position:inside}
+.ls-p2-quick-create>div{padding:0 11px 12px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.ls-p2-quick-create button{padding:10px 7px;border-radius:10px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);font-size:11px}
+.ls-p2-quick-create p{grid-column:1/-1;font-size:11px;line-height:1.5;color:var(--muted);margin:2px 0}
+.ls-p2-saved-link{display:flex;align-items:center;justify-content:space-between;text-align:left;padding:12px 14px;width:100%;border-radius:13px;color:var(--ink);background:var(--surface);border:1px solid var(--line);font-size:12px;font-weight:800}
+.ls-p2-undo{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;background:var(--green-soft);border:1px solid var(--green);border-radius:12px;margin:12px 0;font-size:12px}
+.ls-p2-undo button{padding:9px;border-radius:9px;background:var(--green);color:#061f13;font-size:12px;font-weight:800;border:0}
+.ls-p2-quick button:focus-visible,.ls-p2-undo button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media(min-width:600px){.ls-p2-favorites{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:350px){.ls-p2-favorite-open{padding:11px}.ls-p2-favorite-tools{gap:3px}.ls-p2-favorite-tools button{padding:5px 7px}}
+
+.ls-p2-suggestions{padding:11px;border:1px solid var(--line);border-radius:13px;background:var(--surface-2);display:grid;gap:8px}
+.ls-p2-suggestions>p{font-size:11px;color:var(--muted);margin:0;line-height:1.5}
+.ls-p2-suggestions button{text-align:left;padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)}
+.ls-p2-suggestions button strong,.ls-p2-suggestions button small{display:block;font-size:12px}
+.ls-p2-suggestions button small{font-size:11px;margin-top:4px;color:var(--muted)}

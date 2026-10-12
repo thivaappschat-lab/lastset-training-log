@@ -1,7 +1,7 @@
 name: LastSet Whole App Stress Gate
 on:
   push:
-    branches: [p2-redteam-20261012]
+    branches: [p2-redteam-20261012, 'feat/evening-quicklog-20261012']
     paths:
       - 'index.html'
       - '.github/workflows/lastset-full-redteam.yml'
