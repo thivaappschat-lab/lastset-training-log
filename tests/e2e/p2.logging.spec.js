@@ -335,3 +335,90 @@ test.describe('P2 recovery and optional timer hardening',()=>{
   });
  }
 });
+
+
+test.describe('P2 activity before recording mode',()=>{
+ test('Cardio Cycling is picked before a timer decision and survives a quick save and reload',async({page})=>{
+   await fresh(page);
+   await page.locator('[data-p2-entry="cardio"]').click();
+   await expect(page.locator('[data-p2-activity-choice]')).toHaveCount(10);
+   await expect(page.locator('[data-p2-mode]')).toHaveCount(0);
+   await page.locator('[data-p2-activity-choice="Cycling"]').click();
+   await expect(page.locator('.ls-p2-page-head h2')).toHaveText('Cycling');
+   await page.locator('[data-p2-mode="quick"]').click();
+   await expect(page.locator('[data-p2-blank]')).toBeVisible();
+   await page.locator('[data-p2-blank]').click();
+   await expect(page.locator('[data-p2-field="cardio.activity"]')).toHaveValue('Cycling');
+   await page.locator('[data-p2-field="cardio.duration"]').fill('26');
+   await page.locator('[data-p2-field="cardio.distance"]').fill('9.2');
+   await finish(page);
+   await page.reload({waitUntil:'domcontentloaded'});
+   const saved=(await sessions(page)).filter(x=>x.type==='cardio');
+   expect(saved).toHaveLength(1);
+   expect([saved[0].activity,saved[0].duration,saved[0].distance]).toEqual(['Cycling',26,9.2]);
+ });
+ test('Mobility Pilates is chosen before no-timer logging, persisted separately from Yoga',async({page})=>{
+   await fresh(page);
+   await page.locator('[data-p2-entry="mobility"]').click();
+   await expect(page.locator('[data-p2-activity-choice]')).toHaveCount(5);
+   await expect(page.locator('[data-p2-mode]')).toHaveCount(0);
+   await page.locator('[data-p2-activity-choice="Pilates"]').click();
+   await expect(page.locator('.ls-p2-page-head h2')).toHaveText('Pilates');
+   await page.locator('[data-p2-mode="free"]').click();
+   await page.locator('[data-p2-blank]').click();
+   await expect(page.locator('[data-p2-field="mobility.activity"]')).toHaveValue('Pilates');
+   await expect(page.locator('[data-p2-field="mobility.style"]')).toHaveCount(0);
+   await expect(page.locator('[data-p2-elapsed]')).toHaveCount(0);
+   await page.locator('[data-p2-field="mobility.duration"]').fill('40');
+   await page.locator('[data-p2-add-activity]').click();
+   await finish(page);
+   await page.reload({waitUntil:'domcontentloaded'});
+   const saved=(await sessions(page)).filter(x=>x.type==='mobility');
+   expect(saved).toHaveLength(1);
+   expect([saved[0].activity,saved[0].duration]).toEqual(['Pilates',40]);
+ });
+ test('Back from timer choice returns to activity picker without creating or losing a draft',async({page})=>{
+   await fresh(page);
+   await page.locator('[data-p2-entry="cardio"]').click();
+   await page.locator('[data-p2-activity-choice="Swimming"]').click();
+   await expect(page.locator('[data-p2-mode="timed"]')).toBeVisible();
+   await page.locator('[data-p2-back]').click();
+   await expect(page.locator('[data-p2-activity-choice="Walking"]')).toBeVisible();
+   await expect(page.locator('[data-p2-mode]')).toHaveCount(0);
+   expect(await page.evaluate(()=>globalThis.LastSetP2.loadDraft('cardio'))).toBeNull();
+   await page.locator('[data-p2-activity-choice="Walking"]').click();
+   await expect(page.locator('.ls-p2-page-head h2')).toHaveText('Walking');
+   await page.locator('[data-p2-mode="timed"]').click();
+   await page.locator('[data-p2-back]').click();
+   await expect(page.locator('.ls-p2-page-head h2')).toHaveText('Walking');
+   await page.locator('[data-p2-back]').click();
+   await expect(page.locator('[data-p2-activity-choice="Swimming"]')).toBeVisible();
+ });
+ test('Previous and saved entries are filtered by chosen activity, never silently copy another type',async({page})=>{
+   await fresh(page);await seed(page);
+   await page.locator('[data-p2-entry="cardio"]').click();
+   await page.locator('[data-p2-activity-choice="Swimming"]').click();
+   await page.locator('[data-p2-mode="quick"]').click();
+   await expect(page.locator('[data-p2-source]')).toHaveCount(0);
+   await page.locator('[data-p2-source-tab="saved"]').click();
+   await expect(page.locator('[data-p2-source]')).toHaveCount(0);
+   await page.locator('[data-p2-blank]').click();
+   await expect(page.locator('[data-p2-field="cardio.activity"]')).toHaveValue('Swimming');
+   const prior=(await sessions(page)).filter(x=>x.type==='cardio');
+   expect(prior).toHaveLength(1);
+   expect(prior[0].activity).toBe('Running');
+ });
+ test('Timed mobility choice is retained on resume after reload with no phantom session',async({page})=>{
+   await fresh(page);
+   await page.locator('[data-p2-entry="mobility"]').click();
+   await page.locator('[data-p2-activity-choice="Stretching"]').click();
+   await page.locator('[data-p2-mode="timed"]').click();
+   await page.locator('[data-p2-blank]').click();
+   await expect(page.locator('[data-p2-field="mobility.activity"]')).toHaveValue('Stretching');
+   await expect(page.locator('[data-p2-elapsed]')).toBeVisible();
+   await page.reload({waitUntil:'domcontentloaded'});
+   await page.locator('[data-p2-resume="mobility"]').click();
+   await expect(page.locator('[data-p2-field="mobility.activity"]')).toHaveValue('Stretching');
+   expect((await sessions(page)).filter(x=>x.type==='mobility')).toHaveLength(0);
+ });
+});
