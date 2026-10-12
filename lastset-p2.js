@@ -459,12 +459,19 @@ document.addEventListener('click',e=>{
        selectedResistanceExercise=ex.id;resistanceBrowsing=false;go('p2-mode');return;
      }
    }
-  const el=e.target.closest?.('[data-p2-entry],[data-p2-resume],[data-p2-mark-rest],[data-p2-activity-choice],[data-p2-mode],[data-p2-back],[data-p2-blank],[data-p2-source-tab],[data-p2-source],[data-p2-change-mode],[data-p2-toggle-ex],[data-p2-remove-ex],[data-p2-add-set],[data-p2-remove-set],[data-p2-exercise],[data-p2-add-activity],[data-p2-remove-entry],[data-p2-parse],[data-p2-accept-smart],[data-p2-finish],[data-p2-return],[data-p2-commit],[data-p2-discard],[data-p2-skip-rest],[data-p2-pause],[data-p2-retry],[data-p2-export],[data-p2-save-preset]');
+  const el=e.target.closest?.('[data-p2-entry],[data-p2-resume],[data-p2-mark-rest],[data-p2-activity-choice],[data-p2-mode],[data-p2-back],[data-p2-blank],[data-p2-source-tab],[data-p2-source],[data-p2-change-mode],[data-p2-toggle-ex],[data-p2-remove-ex],[data-p2-add-set],[data-p2-remove-set],[data-p2-exercise],[data-p2-add-activity],[data-p2-remove-entry],[data-p2-parse],[data-p2-accept-smart],[data-p2-finish],[data-p2-return],[data-p2-commit],[data-p2-discard],[data-p2-skip-rest],[data-p2-pause],[data-p2-retry],[data-p2-export],[data-p2-save-preset],[data-p2-pin-favorite],[data-p2-favorite],[data-p2-fav-remove],[data-p2-fav-rename],[data-p2-fav-move],[data-p2-quick-create],[data-p2-today-saved],[data-p2-undo]');
   if(!el)return;e.preventDefault();e.stopImmediatePropagation();
   const d=active(),i=Number(el.dataset.p2ToggleEx||el.dataset.p2RemoveEx||el.dataset.p2AddSet||0);
   if(el.dataset.p2Entry)open(el.dataset.p2Entry);
   else if(el.hasAttribute('data-p2-resume')){if(draft&&!persist())return;category=el.dataset.p2Resume;draft=null;go('p2-workout');}
    else if(el.hasAttribute('data-p2-mark-rest')){if(typeof dayAction==='function')dayAction('rest');}
+   else if(el.hasAttribute('data-p2-favorite'))openFavorite(el.dataset.p2Favorite);
+   else if(el.hasAttribute('data-p2-fav-remove'))alterFavorite(el.dataset.p2FavRemove,'remove');
+   else if(el.hasAttribute('data-p2-fav-rename'))alterFavorite(el.dataset.p2FavRename,'rename');
+   else if(el.hasAttribute('data-p2-fav-move')){const [way,id]=el.dataset.p2FavMove.split(':');alterFavorite(id,'move',way);}
+   else if(el.hasAttribute('data-p2-quick-create'))open(el.dataset.p2QuickCreate);
+   else if(el.hasAttribute('data-p2-today-saved')){if(draft&&!persist())return;category='resistance';draft=null;selectedActivity='';selectedResistanceExercise='';sourceTab='saved';mode='quick';go('p2-sources');}
+   else if(el.hasAttribute('data-p2-undo'))undoLastSave();
   else if(el.hasAttribute('data-p2-activity-choice'))chooseActivity(el.dataset.p2ActivityChoice);
   else if(el.dataset.p2Mode)chooseMode(el.dataset.p2Mode);
   else if(el.hasAttribute('data-p2-back')){
@@ -493,6 +500,7 @@ document.addEventListener('click',e=>{
   else if(el.hasAttribute('data-p2-parse'))parseSmart();
   else if(el.hasAttribute('data-p2-accept-smart'))acceptSmart();
   else if(el.hasAttribute('data-p2-save-preset'))savePreset();
+   else if(el.hasAttribute('data-p2-pin-favorite'))savePreset(true);
   else if(el.hasAttribute('data-p2-finish'))review();
   else if(el.hasAttribute('data-p2-return'))go('p2-workout');
   else if(el.hasAttribute('data-p2-commit'))commit();
