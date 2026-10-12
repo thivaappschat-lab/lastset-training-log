@@ -123,6 +123,7 @@ test.describe('Round 5 post-independent-report focused production validation',()
 // Reuse the established regression assertions against this workflow's live URL.
 // Playwright creates a new disposable browser context for every test.
 require('./p1.smartlog.spec.js');
+require('./p1.exhaustive.spec.js');
 require('./lastset.production.spec.js');
 require('./p2.profile-confirmation.spec.js');
 require('./p2.evening-quicklog.spec.js');
