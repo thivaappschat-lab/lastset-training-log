@@ -1,0 +1,51 @@
+name: LastSet P0 Offline Recovery Repetition
+on:
+  push:
+    branches: [p2-redteam-20261012]
+    paths:
+      - '.github/workflows/p0-offline-repeat.yml'
+      - 'tests/e2e/p0.trust.spec.js'
+      - 'service-worker.js'
+      - 'lastset-offline.js'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: lastset-p0-offline-repeat-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  offline-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [mobile-chromium, mobile-webkit]
+    env:
+      CI: 'true'
+      LASTSET_BASE_URL: http://127.0.0.1:4173/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium webkit
+      - run: bash build-cloudflare.sh
+      - name: Start isolated test app
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory dist >/tmp/lastset-p0-offline.log 2>&1 &
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:4173/ | grep -q lastset-release && exit 0; sleep 1; done
+          cat /tmp/lastset-p0-offline.log
+          exit 1
+      - name: Four distinct loopback origins and true offline reload on each engine
+        run: npx playwright test tests/e2e/p0.trust.spec.js --grep "offline reload keeps confirmed training records intact" --project=${{ matrix.browser }} --repeat-each=4 --retries=0 --timeout=120000
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: p0-offline-repeat-${{ matrix.browser }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
