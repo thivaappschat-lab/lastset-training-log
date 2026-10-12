@@ -130,4 +130,56 @@ test.describe('Evening Quick Log iPhone-first acceptance on isolated candidate o
   await expect(page.locator('[data-p2-favorite]')).toHaveCount(0);
   expect((await db(page)).p2Presets||[]).toHaveLength(0);
  });
+ test('opt-in suggestions never pin or modify history until explicitly chosen',async({page})=>{
+  await fresh(page);
+  await page.evaluate(k=>{
+   const d=JSON.parse(localStorage.getItem(k));
+   d.sessions['2026-09-20']=[{id:'old-cardio',type:'cardio',activity:'Treadmill',duration:20,distance:2,incline:3}];
+   localStorage.setItem(k,JSON.stringify(d));
+  },STORE);
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.locator('.bottom-nav [data-nav="day"]').click();
+  await expect(page.locator('[data-p2-suggestion]')).toHaveCount(0);
+  expect((await db(page)).p2Presets||[]).toHaveLength(0);
+  await page.locator('[data-p2-suggest-toggle]').click();
+  await expect(page.locator('[data-p2-suggestion]')).toHaveCount(1);
+  expect((await db(page)).p2Presets||[]).toHaveLength(0);
+  page.once('dialog',dialog=>dialog.accept('Suggested treadmill'));
+  await page.locator('[data-p2-suggestion]').click();
+  await expect(page.locator('[data-p2-favorite]')).toContainText('Suggested treadmill');
+  const sessions=await allSessions(page);
+  expect(sessions).toHaveLength(1);expect(sessions[0].id).toBe('old-cardio');
+ });
+ test('Undo of a just saved resistance session removes only its tagged sets',async({page})=>{
+  await fresh(page);
+  await page.locator('[data-p2-entry="resistance"]').click();
+  await page.locator('[data-exercise="bench-press"]').click();
+  await page.locator('[data-p2-mode="free"]').click();
+  await page.locator('[data-p2-blank]').click();
+  await page.locator('[data-p2-add-weight="0"]').fill('50');
+  await page.locator('[data-p2-add-reps="0"]').fill('8');
+  await page.locator('[data-p2-add-set="0"]').click();
+  await page.locator('[data-p2-finish]').click();
+  await page.locator('[data-p2-commit]').click();
+  expect((await allSessions(page)).filter(s=>s.type==='resistance')).toHaveLength(1);
+  await page.locator('[data-p2-undo]').click();
+  expect((await allSessions(page)).filter(s=>s.type==='resistance')).toHaveLength(0);
+ });
+ test('Undo refuses to remove history if local storage rejects the save',async({page})=>{
+  await fresh(page);await pinCardio(page);
+  await page.locator('[data-p2-favorite]').click();
+  await page.locator('[data-p2-confirm-copy]').check();
+  await page.locator('[data-p2-finish]').click();
+  await page.locator('[data-p2-commit]').click();
+  await page.evaluate(()=>{
+   window.__originalSet=Storage.prototype.setItem;
+   Storage.prototype.setItem=function(k,v){if(k==='lastset-data-v1')throw new DOMException('Simulated quota','QuotaExceededError');return window.__originalSet.call(this,k,v);};
+  });
+  await page.locator('[data-p2-undo]').click();
+  expect((await allSessions(page)).filter(s=>s.type==='cardio')).toHaveLength(1);
+  await page.evaluate(()=>{Storage.prototype.setItem=window.__originalSet;});
+  await page.locator('[data-p2-undo]').click();
+  expect((await allSessions(page)).filter(s=>s.type==='cardio')).toHaveLength(0);
+ });
+
 });
