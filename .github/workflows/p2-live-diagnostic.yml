@@ -1,0 +1,53 @@
+name: LastSet P2 Live Diagnostic
+on:
+  push:
+    branches: [p2-redteam-20261012]
+    paths:
+      - '.github/workflows/p2-live-diagnostic.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  read-only-diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read production version and asset routes
+        shell: bash
+        run: |
+          set -uo pipefail
+          base="https://lastset-training-log.thiva-claimflow.workers.dev"
+          for asset in / /index.html /lastset-build.json /lastset-p2.js /lastset-p2.css /service-worker.js /assets/anatomy-male-front.webp; do
+            echo "CHECK $asset"
+            tmp="$(mktemp)"
+            status="$(curl -sS -L --max-redirs 5 --max-time 12 -H "Cache-Control: no-cache" -o "$tmp" -w "%{http_code} %{content_type} %{url_effective}" "$base$asset?v=f03ddb07baf78e96bc6a5b583ebb")" || true
+            echo "RESULT $status bytes=$(wc -c < "$tmp")"
+            if [[ "$asset" == "/lastset-build.json" ]]; then head -c 220 "$tmp"; echo; fi
+            if [[ "$asset" == "/" || "$asset" == "/index.html" ]]; then
+              if grep -q "lastset-release" "$tmp"; then echo "RELEASE_TAG_PRESENT"; else echo "RELEASE_TAG_ABSENT"; fi
+            fi
+            rm -f "$tmp"
+          done
+      - name: Verify deployed bytes against saved immutable package
+        uses: actions/download-artifact@v4
+        with:
+          repository: thivaappschat-lab/lastset-training-log
+          run-id: 38191353350
+          github-token: ${{ github.token }}
+          name: lastset-p2-candidate-f03ddb07baf78e96bc6a5b583ebb7071ffafa6c2
+          path: ./release
+      - name: Asset-by-asset comparison
+        shell: bash
+        run: |
+          set -uo pipefail
+          base="https://lastset-training-log.thiva-claimflow.workers.dev"
+          for asset in lastset-p2.js lastset-p2.css service-worker.js assets/anatomy-female-back.webp assets/anatomy-male-front.webp; do
+            tmp="$(mktemp)"
+            result="$(curl -sSL --max-time 15 -o "$tmp" -w "%{http_code}" "$base/$asset?v=f03ddb07baf78e96bc6a5b583ebb")" || true
+            if [[ "$result" == "200" ]] && cmp -s "release/dist/$asset" "$tmp"; then
+              echo "MATCH $asset"
+            else
+              echo "MISMATCH $asset status=$result expected_bytes=$(wc -c < "release/dist/$asset") actual_bytes=$(wc -c < "$tmp")"
+            fi
+            rm -f "$tmp"
+          done
