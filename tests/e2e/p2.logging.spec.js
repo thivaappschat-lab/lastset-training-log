@@ -19,6 +19,10 @@ async function choose(page,category,mode,source='blank'){
   await expect(page.locator('.ls-exercise-hero')).toBeVisible();
   await expect(page.locator('[data-exercise="bench-press"]')).toBeVisible();
   await page.locator('[data-exercise="bench-press"]').click();
+ }else if(category==='cardio'||category==='mobility'){
+  await expect(page.locator('[data-p2-mode]')).toHaveCount(0);
+  await expect(page.locator('[data-p2-activity-choice]')).toHaveCount(category==='cardio'?10:5);
+  await page.locator('[data-p2-activity-choice="'+(category==='cardio'?'Running':'Yoga')+'"]').click();
  }
  await expect(page.locator('[data-p2-mode="'+mode+'"]')).toBeVisible();
  await page.locator('[data-p2-mode="'+mode+'"]').click();
@@ -78,7 +82,12 @@ test.describe('P2 four-category logging modes and safe source reuse',()=>{
     await expect(page.locator('.ls-exercise-hero')).toBeVisible();
     await page.locator('[data-exercise="bench-press"]').click();
    }
-   await expect(page.locator('.ls-p2-page-head h2')).toContainText(category==='resistance'?'Bench Press':category==='cardio'?'Cardio':category==='mobility'?'Mobility':'Smart Log');
+   if(category==='cardio'||category==='mobility'){
+    await expect(page.locator('[data-p2-mode]')).toHaveCount(0);
+    await expect(page.locator('.ls-p2-page-head h2')).toContainText(category==='cardio'?'cardio':'mobility');
+    await page.locator('[data-p2-activity-choice="'+(category==='cardio'?'Running':'Yoga')+'"]').click();
+   }
+   await expect(page.locator('.ls-p2-page-head h2')).toContainText(category==='resistance'?'Bench Press':category==='cardio'?'Running':category==='mobility'?'Yoga':'Smart Log');
    for(const m of ['quick','free','timed'])await expect(page.locator('[data-p2-mode="'+m+'"]')).toBeVisible();
    await page.locator('[data-p2-back]').click();
    await page.locator('.bottom-nav [data-nav="day"]').click();
@@ -89,12 +98,14 @@ test.describe('P2 four-category logging modes and safe source reuse',()=>{
    await fresh(page);await choose(page,'resistance','free');await addBench(page);
    await page.locator('.bottom-nav [data-nav="day"]').click();
    await page.locator('[data-p2-entry="cardio"]').click();
-   await expect(page.locator('.ls-p2-page-head h2')).toHaveText('Cardio');
+   await expect(page.locator('.ls-p2-page-head h2')).toHaveText('Choose cardio type');
+   await page.locator('[data-p2-activity-choice="Running"]').click();
    await page.locator('[data-p2-mode="free"]').click();await page.locator('[data-p2-blank]').click();
    await expect(page.locator('[data-p2-field="cardio.duration"]')).toBeVisible();
    await page.locator('.bottom-nav [data-nav="day"]').click();
    await page.locator('[data-p2-entry="mobility"]').click();
-   await expect(page.locator('.ls-p2-page-head h2')).toHaveText('Mobility & Recovery');
+   await expect(page.locator('.ls-p2-page-head h2')).toHaveText('Choose mobility & recovery type');
+   await page.locator('[data-p2-activity-choice="Yoga"]').click();
    await page.locator('[data-p2-mode="free"]').click();await page.locator('[data-p2-blank]').click();
    await expect(page.locator('[data-p2-field="mobility.duration"]')).toBeVisible();
    await page.locator('.bottom-nav [data-nav="day"]').click();
