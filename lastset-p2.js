@@ -446,9 +446,15 @@ function commit(){
     }
     next.sessions[d.date]=list.filter(s=>s.type!=='rest');
   }
+  let workoutPersisted=false;
   try{
-    saveData(next);data=next;recentUndo={userId:profileId,id:mark,date:d.date,expiresAt:Date.now()+60000};clear();message='';state.selectedDate=d.date;state.view='day';render();showToast('Workout saved to History');
-  }catch(err){message='Workout was not fully saved. Keep LastSet open. Retry will not duplicate any set.';failure=true;render();}
+    saveData(next);workoutPersisted=true;
+    try{globalThis.LastSetMonitoring?.record('save_success');}catch(_){}
+    data=next;recentUndo={userId:profileId,id:mark,date:d.date,expiresAt:Date.now()+60000};clear();message='';state.selectedDate=d.date;state.view='day';render();showToast('Workout saved to History');
+  }catch(err){
+    if(!workoutPersisted){try{globalThis.LastSetMonitoring?.record('save_failure');}catch(_){}}
+    message='Workout was not fully saved. Keep LastSet open. Retry will not duplicate any set.';failure=true;render();
+  }
 }
 function acceptSmart(){
   const d=active(),p=d?.smartCandidate;if(!p)return;
