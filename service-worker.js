@@ -52,6 +52,8 @@ const ASSETS = [
   './lastset-smartlog-mobile.css',
   './lastset-p2.css',
   './lastset-p2.js',
+  './lastset-monitoring.js',
+  './lastset-monitoring.css',
   './assets/anatomy-front.webp',
   './assets/anatomy-back.webp',
   './assets/anatomy-female-front.webp',
