@@ -102,7 +102,7 @@
     backdrop.querySelector('[data-monitor-close]')?.focus();
   }
   function mount(){
-    if(chip||!document.body)return;
+    if(IS_QA||chip||!document.body)return;
     chip=document.createElement('button');
     chip.id='ls-monitor-privacy-control';
     chip.className='ls-monitor-chip';
