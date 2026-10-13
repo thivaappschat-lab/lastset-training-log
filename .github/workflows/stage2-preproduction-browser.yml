@@ -1,0 +1,55 @@
+name: LastSet Stage 2 — Pre-Production Mobile Browser Gate
+on:
+  push:
+    branches: [stage2-optin-monitoring-20261014]
+    paths: [.github/workflows/stage2-preproduction-browser.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [mobile-chromium, mobile-webkit]
+    env:
+      CI: 'true'
+      LASTSET_BASE_URL: http://127.0.0.1:4173/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Package exactly this candidate without deploying
+        run: |
+          bash build-cloudflare.sh
+          test -s dist/lastset-monitoring.js
+          test -s dist/lastset-monitoring.css
+          grep -Fq 'lastset-monitoring.js' dist/index.html
+      - name: Install mobile test browser
+        run: npx playwright install --with-deps chromium webkit
+      - name: Serve isolated candidate without production traffic
+        run: |
+          nohup python3 -m http.server 4173 --bind 127.0.0.1 --directory dist >/tmp/lastset-stage2-site.log 2>&1 &
+          for i in $(seq 1 20); do if curl -fsS http://127.0.0.1:4173/index.html >/dev/null; then exit 0; fi; sleep 1; done
+          exit 1
+      - name: Mobile acceptance — logging, saves, recovery, and privacy
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/monitoring-privacy.test.mjs
+          npx playwright test tests/e2e/p2.logging.spec.js tests/e2e/p2.profile-confirmation.spec.js --project=${{ matrix.browser }} --retries=0 --timeout=45000 --grep 'quick resistance: 3 sets saved exactly once|quick cardio logs duration|mobility quick records yoga|copied cardio and mobility previous records|profile switch never reveals|failed profile storage|Cardio Cycling is picked before|Mobility Pilates is chosen before|Previous and saved entries are filtered|Back from timer choice returns'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: stage2-mobile-fail-${{ matrix.browser }}
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 3
+          if-no-files-found: ignore
