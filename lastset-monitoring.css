@@ -1,0 +1,13 @@
+/* Optional, non-blocking monitoring controls. Default follows device light/dark. */
+.ls-monitor-chip{position:fixed;right:10px;bottom:92px;z-index:1003;border:1px solid #65768e;border-radius:99px;padding:7px 12px;background:#172338;color:#edf3fa;font:600 11px/1.25 system-ui,-apple-system,sans-serif;box-shadow:0 2px 12px #0005;max-width:46vw}
+.ls-monitor-chip:focus-visible{outline:3px solid #68e6ad;outline-offset:2px}
+.ls-monitor-backdrop{position:fixed;inset:0;z-index:3000;background:#000b;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto}
+.ls-monitor-panel{width:min(100%,480px);max-height:85vh;overflow:auto;box-sizing:border-box;background:#111e30;color:#f0f5fa;border:1px solid #455c74;border-radius:16px;padding:22px;box-shadow:0 10px 42px #0008;font:400 14px/1.55 system-ui,-apple-system,sans-serif}
+.ls-monitor-panel h2{font-size:21px;margin:0 0 10px}
+.ls-monitor-panel p{margin:0 0 12px}
+.ls-monitor-panel .ls-monitor-note{font-size:11px;opacity:.8}
+.ls-monitor-actions{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}
+.ls-monitor-actions button{border-radius:9px;border:1px solid #52718e;color:#fff;background:#253c53;padding:10px 12px;cursor:pointer;font:600 12px system-ui}
+.ls-monitor-actions [data-monitor-enable]{background:#1e6e51;border-color:#3ea779}
+@media(prefers-color-scheme:light){.ls-monitor-chip{color:#19283a;background:#f0f6fb;border-color:#9aaabe}.ls-monitor-panel{color:#223047;background:#fff;border-color:#c2cbd5}.ls-monitor-actions button{color:#17283d;background:#e8eef7}.ls-monitor-actions [data-monitor-enable]{color:#fff;background:#18704b}}
+@media(max-width:420px){.ls-monitor-chip{bottom:84px;right:7px;font-size:10px;padding:6px 9px}.ls-monitor-panel{padding:16px}}
