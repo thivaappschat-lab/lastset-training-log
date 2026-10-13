@@ -20,6 +20,17 @@ jobs:
           node --check lastset-p2.js
           node --check worker.js
           node --test tests/monitoring-privacy.test.mjs
+      - name: Verify complete static package includes opt-in monitoring files
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash build-cloudflare.sh
+          test -s dist/lastset-monitoring.js
+          test -s dist/lastset-monitoring.css
+          grep -Fq '/lastset-monitoring.js' dist/index.html
+          grep -Fq '/lastset-monitoring.css' dist/index.html
+          grep -Fq './lastset-monitoring.js' dist/service-worker.js
+          node --check dist/lastset-monitoring.js
       - name: Confirm this workflow has no production deployment
         run: |
           test ! -f /tmp/stage2-production-release-triggered
