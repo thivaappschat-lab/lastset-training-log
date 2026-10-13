@@ -35,6 +35,8 @@ cp lastset-smartlog-mobile.js dist/
 cp lastset-smartlog-mobile.css dist/
 cp lastset-p2.js dist/
 cp lastset-p2.css dist/
+cp lastset-monitoring.js dist/
+cp lastset-monitoring.css dist/
 cp lastset-memory.js dist/
 cp lastset-intelligence.js dist/
 cp lastset-calendar.js dist/
