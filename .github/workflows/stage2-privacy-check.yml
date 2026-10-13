@@ -1,0 +1,26 @@
+name: LastSet Stage 2 — Opt-in Monitoring Safety Gate
+on:
+  push:
+    branches: [stage2-optin-monitoring-20261014]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  privacy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate opt-in monitoring without changing public workouts
+        run: |
+          node --check lastset-monitoring.js
+          node --check lastset-p2.js
+          node --check worker.js
+          node --test tests/monitoring-privacy.test.mjs
+      - name: Confirm this workflow has no production deployment
+        run: |
+          test ! -f /tmp/stage2-production-release-triggered
+          echo "No live deploy or training data mutation performed."
