@@ -1,0 +1,168 @@
+name: LastSet Stage 2 — Approved Monitored Production Rollout
+on:
+  push:
+    branches: [stage2-optin-monitoring-20261014]
+    paths: ['.github/workflows/stage2-approved-release.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: lastset-p2-production-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+      CLOUDFLARE_ACCOUNT_ID: d04b8160bdf0f3df7658ea6c7b2161d7
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+      TESTED_SHA: 84ef5586b48a76828f0c50d01b22da7a7108f09c
+      LASTSET_RELEASE_ID: 84ef5586b48a76828f0c50d01b
+      OLD_BUILD: b2fcb4176e090183852c81b8a95c
+      OLD_VERSION: 2defb86d-16d7-4407-be51-e019fdc553c0
+      BASE: https://lastset-training-log.thiva-claimflow.workers.dev
+      LASTSET_BASE_URL: https://lastset-training-log.thiva-claimflow.workers.dev/
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require byte-identical tested candidate, adding only this release workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "$TESTED_SHA^{commit}"
+          changed="$(git diff --name-only "$TESTED_SHA" HEAD)"
+          echo "Changes since tested SHA: $changed"
+          test "$changed" = ".github/workflows/stage2-approved-release.yml"
+          node --check worker.js
+          node --check lastset-monitoring.js
+          node --check lastset-p2.js
+          test -f wrangler.jsonc
+      - name: Verify successful exact-source privacy and two-browser gate runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'JS'
+          const checks=[38487498691,38487498681];
+          (async()=>{
+            for(const id of checks){
+              const res=await fetch('https://api.github.com/repos/'+process.env.GITHUB_REPOSITORY+'/actions/runs/'+id,{
+                headers:{Authorization:'Bearer '+process.env.GH_TOKEN,Accept:'application/vnd.github+json','User-Agent':'LastSet-Stage2-release-audit'}
+              });
+              if(!res.ok)throw Error('Cannot load security gate '+id+' HTTP '+res.status);
+              const run=await res.json();
+              if(run.status!=='completed'||run.conclusion!=='success'||run.head_sha!==process.env.TESTED_SHA)
+                throw Error('Release stopped: gate '+id+' not green on exact candidate.');
+              console.log('Verified green gate '+id+' at '+run.head_sha);
+            }
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
+      - name: Require approved baseline and previously provisioned credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "::error::Cloudflare token not configured; production unchanged"; exit 1; fi
+          curl -fsSL --retry 3 --max-time 30 -H 'Cache-Control: no-cache' "$BASE/lastset-build.json" | grep -F "$OLD_BUILD"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Rebuild verified candidate and re-run consent and storage isolation checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund
+          node --test tests/monitoring-privacy.test.mjs
+          bash build-cloudflare.sh
+          test -s dist/lastset-monitoring.js
+          test -s dist/lastset-monitoring.css
+          grep -Fq '/lastset-monitoring.js' dist/index.html
+          grep -Fq '/lastset-monitoring.css' dist/index.html
+          grep -Fq './lastset-monitoring.js' dist/service-worker.js
+          node --check dist/service-worker.js
+          node -e "const b=require('./dist/lastset-build.json');if(b.id!==process.env.LASTSET_RELEASE_ID)process.exit(1)"
+          sha256sum dist/index.html dist/lastset-p2.js dist/lastset-monitoring.js dist/lastset-monitoring.css dist/service-worker.js worker.js > stage2.sha256
+          sha256sum -c stage2.sha256
+      - name: Validate all approved anatomy and brand artwork is unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          for artwork in dist/assets/*; do
+            test -f "$artwork" || continue
+            remote="$(mktemp)"
+            curl -fsSL --retry 3 --max-time 30 -H 'Cache-Control: no-cache' "$BASE/${artwork#dist/}?v=$OLD_BUILD" -o "$remote"
+            cmp -s "$artwork" "$remote" || { echo "::error::Artwork changed unexpectedly: $artwork"; exit 1; }
+            rm -f "$remote"
+            count=$((count+1))
+          done
+          echo "Unchanged artwork files: $count"
+          test "$count" -ge 5
+      - name: Publish exact approved opt-in LastSet candidate
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            echo "Deployment attempt $attempt"
+            if npx --yes wrangler@4 deploy --config wrangler.jsonc; then exit 0; fi
+            actual="$(curl -fsSL --retry 2 --max-time 25 -H 'Cache-Control: no-cache' "$BASE/lastset-build.json" || true)"
+            if printf '%s' "$actual" | grep -Fq "$LASTSET_RELEASE_ID"; then echo "New version detected after CLI timeout"; exit 0; fi
+            if ! printf '%s' "$actual" | grep -Fq "$OLD_BUILD"; then
+              echo "::error::Unexpected live version; stop retries and attempt rollback"; exit 1
+            fi
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            sleep $((attempt * 15))
+          done
+      - name: Verify live version and every public static asset after deployment
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 15); do
+            if curl -fsSL --max-time 25 -H 'Cache-Control: no-cache' "$BASE/lastset-build.json" | grep -Fq "$LASTSET_RELEASE_ID"; then break; fi
+            sleep 5
+          done
+          curl -fsSL --max-time 25 "$BASE/lastset-build.json" | grep -F "$LASTSET_RELEASE_ID"
+          matched=0
+          while IFS= read -r -d '' file; do
+            asset="${file#dist/}"
+            case "$asset" in _headers|_redirects) continue;; esac
+            tmp="$(mktemp)"
+            curl -fsSL --retry 3 --max-time 30 -H 'Cache-Control: no-cache' "$BASE/$asset?v=$LASTSET_RELEASE_ID" -o "$tmp"
+            cmp -s "$file" "$tmp" || { echo "::error::Live asset mismatch: $asset"; rm -f "$tmp"; exit 1; }
+            rm -f "$tmp"
+            matched=$((matched+1))
+          done < <(find dist -type f -print0 | sort -z)
+          echo "Verified identical live static assets: $matched"
+          test "$matched" -ge 60
+      - name: Install mobile browsers for post-deployment smoke
+        run: npx playwright install --with-deps chromium webkit
+      - name: Live Chromium and WebKit save/data-integrity acceptance
+        id: live_browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx playwright test tests/e2e/p2.logging.spec.js --project=mobile-chromium --project=mobile-webkit --retries=0 --timeout=45000 --grep 'quick resistance: 3 sets saved exactly once|quick cardio logs duration|mobility quick records yoga|profile switch never reveals|Cardio Cycling is picked before|Mobility Pilates is chosen before|Previous and saved entries are filtered'
+      - name: Roll back to prior approved Worker if a release or acceptance gate fails
+        if: ${{ failure() && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Production verification failed; restoring prior approved Cloudflare Worker."
+          payload="$(printf '{"strategy":"percentage","versions":[{"version_id":"%s","percentage":100}],"annotations":{"workers/message":"Stage 2 automatic rollback after failed post-deploy verification"}}' "$OLD_VERSION")"
+          curl -fsS --retry 3 --max-time 40 -X POST "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/lastset-training-log/deployments" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' -d "$payload"
+          echo "Rollback requested to $OLD_VERSION; verify site release manually."
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: stage2-production-release-failure
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 3
+          if-no-files-found: ignore
